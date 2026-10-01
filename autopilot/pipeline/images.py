@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 import re
 import tempfile
+import time
 from pathlib import Path
 
 import httpx
@@ -38,27 +39,35 @@ FONT_CANDIDATES = [
 def run_images(cfg: Config, wechat: WechatClient, llm: LLM,
                blocks: list[str], title: str) -> tuple[str, dict]:
     meta: dict = {"cover_media_id": None, "body_images": [], "fallback_used": False}
+    cover_src_url = None
 
+    # 封面：draft/add 要求 thumb_media_id，因此图库失败时用本地纯色标题封面兜底
     try:
         keywords = _en_keywords(llm, title)
         cover_path, cover_src_url = _fetch_photo(cfg, keywords)
         if cover_path is None:
             raise RuntimeError(f"Pexels 按 “{keywords}” 无可用图片")
-
         processed = _process_cover(cover_path, title)
-        meta["cover_media_id"] = wechat.add_material(processed, "thumb")
         meta["cover_query"] = keywords
+    except Exception as err:
+        if not cfg.fallback_plain:
+            raise
+        meta["fallback_used"] = True
+        meta["fallback_reason"] = str(err)[:200]
+        processed = _local_cover(title)
+        meta["cover_source"] = "local_fallback"
+    meta["cover_media_id"] = wechat.add_material(processed, "thumb")
 
+    # 正文图：锦上添花，任何失败只记录不阻塞
+    try:
+        keywords = meta.get("cover_query") or _en_keywords(llm, title)
         body_path, _ = _fetch_photo(cfg, keywords, exclude_url=cover_src_url)
         if body_path is not None:
             url = wechat.upload_content_image(body_path)
             meta["body_images"] = [url]
             blocks = _splice_image(blocks, url)
-    except Exception as err:  # 配图是锦上添花，任何失败都不阻塞主流程
-        if not cfg.fallback_plain:
-            raise
-        meta["fallback_used"] = True
-        meta["fallback_reason"] = str(err)[:200]
+    except Exception as err:
+        meta["body_image_skipped"] = str(err)[:200]
 
     footer = "AI 辅助创作" if cfg.ai_disclosure else ""
     return render_shell(blocks, cfg.style_template, footer=footer), meta
@@ -115,6 +124,21 @@ def _process_cover(src: Path, title: str) -> Path:
         draw.text((36, img.height - 100), text, font=font, fill=(255, 255, 255, 255))
 
     out = Path(tempfile.gettempdir()) / f"cover_{src.stem}.jpg"
+    img.save(out, "JPEG", quality=88)
+    return out
+
+
+def _local_cover(title: str) -> Path:
+    """图库失败时的兜底封面：纯色底 + 居中标题白字。"""
+    img = Image.new("RGB", COVER_SIZE, (90, 105, 120))
+    font = _load_font(54)
+    if font is not None:
+        draw = ImageDraw.Draw(img)
+        text = _fit_line(draw, title, font, img.width - 120)
+        width = draw.textlength(text, font=font)
+        draw.text(((img.width - width) / 2, (img.height - 70) / 2), text,
+                  font=font, fill=(255, 255, 255))
+    out = Path(tempfile.gettempdir()) / f"autopilot-cover-{int(time.time() * 1000)}.jpg"
     img.save(out, "JPEG", quality=88)
     return out
 

@@ -22,7 +22,8 @@ def run_publish(cfg: Config, wechat: WechatClient, llm: LLM, *,
                 html: str, title: str, article_text: str,
                 cover_media_id: str | None, humanize_report: dict,
                 usage_summary: dict, prompt_versions: dict) -> dict:
-    digest = _make_digest(cfg, llm, article_text)
+    digest, digest_version = _make_digest(cfg, llm, article_text)
+    prompt_versions = {**prompt_versions, "digest.md": digest_version}
 
     article = {
         "title": title,
@@ -75,14 +76,14 @@ def run_publish(cfg: Config, wechat: WechatClient, llm: LLM, *,
     return result
 
 
-def _make_digest(cfg: Config, llm: LLM, article_text: str) -> str:
-    system, _ = load_prompt("digest.md")
+def _make_digest(cfg: Config, llm: LLM, article_text: str) -> tuple[str, str]:
+    system, version = load_prompt("digest.md")
     digest = llm.chat(system, article_text[:2000]).strip().strip('"“”')
     limit = 110 if cfg.ai_disclosure else 120
     digest = digest[:limit]
     if cfg.ai_disclosure:
         digest += "｜AI 辅助创作"
-    return digest
+    return digest, version
 
 
 def _poll(wechat: WechatClient, publish_id: str, interval_sec: int, timeout_sec: int):

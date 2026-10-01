@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..config import Config
-from ..llm import LLM
+from ..llm import LLM, LLMError
 from .common import load_prompt
 
 
@@ -23,7 +23,6 @@ def run_titlist(cfg: Config, llm: LLM, article_text: str) -> dict:
         except (TypeError, ValueError):
             c["score"] = 0.0
     if not candidates:
-        from ..llm import LLMError
         raise LLMError("标题候选为空，请重跑 --from titlist。")
 
     ranked = sorted(candidates, key=lambda c: c["score"], reverse=True)

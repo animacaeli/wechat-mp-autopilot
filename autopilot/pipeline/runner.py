@@ -64,7 +64,11 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
         from ..pipeline import topics as topics_mod
         llm = LLM(cfg, "topics")
         topics_result = topics_mod.run_topics(cfg, llm, opts.direction, opts.pick)
-        state = RunState(cfg, _new_run_dir(topics_result["picked"]["title_direction"]))
+        if opts.from_stage == "topics":
+            # --from topics --resume <dir>：重跑选题写回同一目录
+            state = RunState(cfg, _require_resume_dir(opts))
+        else:
+            state = RunState(cfg, _new_run_dir(topics_result["picked"]["title_direction"]))
         state.prompt_versions["topic.selector.md"] = topics_result["prompt_version"]
         save_json(state.artifact("topics"), topics_result)
         state.track("topics", llm)
@@ -131,13 +135,16 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     if from_index <= 5:
         from ..pipeline import images as images_mod
         wechat = WechatClient(cfg.app_id, cfg.app_secret)
-        html, meta = images_mod.run_images(cfg, wechat, LLM(cfg), list(blocks), title)
-        state.artifact("images").parent.mkdir(parents=True, exist_ok=True)
+        images_llm = LLM(cfg)
+        html, meta = images_mod.run_images(cfg, wechat, images_llm, list(blocks), title)
+        state.track("images", images_llm)
         (state.run_dir / "05_article.html").write_text(html, encoding="utf-8")
         save_json(state.artifact("images"), meta)
         cover_info = ("封面 + 正文图" if meta.get("body_images")
                       else "仅封面" if meta.get("cover_media_id")
-                      else f"配图降级（{meta.get('fallback_reason', '纯文字排版')}）")
+                      else "无封面（草稿推送可能被微信拒绝）")
+        if meta.get("fallback_used"):
+            cover_info += f"，图库降级：{meta.get('fallback_reason', '')[:60]}"
         print(f"[6/7] 配图：{cover_info}")
     else:
         meta = load_json(state.artifact("images"))
@@ -146,14 +153,16 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     # ── ⑦ 草稿 +（auto）发布 ─────────────────────────────
     from ..pipeline import publisher as publisher_mod
     wechat = WechatClient(cfg.app_id, cfg.app_secret)
+    digest_llm = LLM(cfg, "digest")
     result = publisher_mod.run_publish(
-        cfg, wechat, LLM(cfg, "digest"),
+        cfg, wechat, digest_llm,
         html=html, title=title, article_text=humanized,
         cover_media_id=meta.get("cover_media_id"),
         humanize_report=report,
         usage_summary=state.usage.summary(),
         prompt_versions=dict(state.prompt_versions),
     )
+    state.track("digest", digest_llm)
     save_json(state.artifact("publish"), result)
     if "publish_id" in result:
         save_json(state.run_dir / "08_publish_result.json", {

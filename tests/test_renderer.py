@@ -74,3 +74,12 @@ def test_no_external_link_tag():
     html = "\n".join(render_blocks(md, "clean"))
     assert "<a " not in html  # 外链会被微信过滤，渲染为灰蓝 span
     assert "<span" in html
+
+
+def test_raw_html_in_text_is_escaped():
+    """LLM 可能在正文漏出裸 HTML，必须转义而不是透传（防御性）。"""
+    md = '段落里混入 <script>alert(1)</script> 和 <img src=x onerror=1>。\n'
+    html = "\n".join(render_blocks(md, "clean"))
+    assert "<script>" not in html
+    assert "<img src=x" not in html
+    assert "&lt;script&gt;" in html

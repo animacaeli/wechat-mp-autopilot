@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..config import Config
-from ..llm import LLM
+from ..llm import LLM, LLMError
 from .common import load_prompt
 
 # LLM 偶尔会用中文键名，这里做一层别名归一
@@ -45,7 +45,6 @@ def run_topics(cfg: Config, llm: LLM, direction: str, pick: int | None = None) -
     raw = data.get("candidates") or data.get("topics") or []
     candidates = [c for c in (_normalize(x) for x in raw if isinstance(x, dict)) if c]
     if not candidates:
-        from ..llm import LLMError
         raise LLMError("选题结果为空或字段无法识别，请重跑（可先 autopilot run --topic-only 排查）。")
 
     if pick is not None:

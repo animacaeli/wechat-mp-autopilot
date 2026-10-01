@@ -23,7 +23,10 @@ class WechatClient:
     def __init__(self, app_id: str, app_secret: str, http: httpx.Client | None = None):
         self.app_id = app_id
         self.app_secret = app_secret
-        self._http = http or httpx.Client(timeout=30)
+        # 连接级失败（握手/连接重置）自动重试 2 次；业务错误码另行处理
+        self._http = http or httpx.Client(
+            timeout=30, transport=httpx.HTTPTransport(retries=2)
+        )
         self._token: str | None = None
         self._token_expire_at = 0.0
 
@@ -70,7 +73,7 @@ class WechatClient:
         with open(image_path, "rb") as fh:
             data = self._request(
                 "POST", "/cgi-bin/media/uploadimg",
-                files={"media": (image_path.name, fh, "image/jpeg")},
+                files={"media": (image_path.name, fh, _image_mime(image_path))},
             )
         return data["url"]
 
@@ -80,7 +83,7 @@ class WechatClient:
             data = self._request(
                 "POST", "/cgi-bin/material/add_material",
                 params={"type": material_type},
-                files={"media": (image_path.name, fh, "image/jpeg")},
+                files={"media": (image_path.name, fh, _image_mime(image_path))},
             )
         return data["media_id"]
 
@@ -121,6 +124,13 @@ class WechatClient:
     def freepublish_delete(self, article_id: str, index: int = 0) -> bool:
         self._post("/cgi-bin/freepublish/delete", {"article_id": article_id, "index": index})
         return True
+
+
+def _image_mime(image_path: Path) -> str:
+    """按魔数识别图片类型，避免 PNG 被标成 jpeg 而被微信拒绝。"""
+    with open(image_path, "rb") as fh:
+        head = fh.read(8)
+    return "image/png" if head.startswith(b"\x89PNG") else "image/jpeg"
 
 
 PUBLISH_STATUS_TEXT = {

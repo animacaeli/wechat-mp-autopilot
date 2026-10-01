@@ -160,7 +160,8 @@ def render_blocks(markdown_text: str, template_name: str) -> list[str]:
     """markdown → inline-styled HTML 块列表（图片占位由配图阶段负责）。"""
     theme = THEMES.get(template_name, THEMES["clean"])
     renderer = WechatRenderer(theme)
-    md = mistune.create_markdown(renderer=renderer)
+    # escape=True：正文中的裸 HTML（如 LLM 漏出的 <script>）一律转义，不透传
+    md = mistune.create_markdown(renderer=renderer, escape=True)
     md(markdown_text)
     return renderer.blocks
 

@@ -161,14 +161,13 @@ def _check_freepublish(cfg: Config, with_publish: bool) -> int:
             icon = OK if state == "yes" else WARN
             print(f"  {icon} 发布权限（只读探测，{detail}）")
             return 0
-        _full_publish_test(wechat)
-        return 0
+        return 0 if _full_publish_test(wechat) else 1
     except (WechatApiError, httpx.HTTPError) as err:
         print(f"  {BAD} 发布权限探测失败：{err}")
         return 1
 
 
-def _full_publish_test(wechat: WechatClient) -> None:
+def _full_publish_test(wechat: WechatClient) -> bool:
     """全链路实测：本地生成测试封面 → 推草稿 → 提交发布 → 轮询 → 删除发布与草稿。"""
     import tempfile
     import time
@@ -177,6 +176,7 @@ def _full_publish_test(wechat: WechatClient) -> None:
 
     print("  … 全链路实测开始（发布一篇测试文章后立即删除，约 1 分钟）")
     media_id = article_id = None
+    ok = True
     try:
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as fh:
             Image.new("RGB", (900, 383), (240, 240, 240)).save(fh, "JPEG")
@@ -198,11 +198,12 @@ def _full_publish_test(wechat: WechatClient) -> None:
             result = parse_publish_result(wechat.freepublish_get(publish_id))
             if result["status"] != 1:
                 break
-        print(f"  {OK if result['status'] == 0 else WARN} 发布结果：{result['status_text']}")
+        ok = result["status"] == 0
+        print(f"  {OK if ok else WARN} 发布结果：{result['status_text']}")
         article_id = result.get("article_id")
-    except WechatApiError as err:
+    except (WechatApiError, httpx.HTTPError) as err:
         print(f"  {BAD} 全链路实测失败：{err}")
-        return
+        ok = False
     finally:
         try:
             if article_id:
@@ -211,8 +212,9 @@ def _full_publish_test(wechat: WechatClient) -> None:
             if media_id:
                 wechat.delete_draft(media_id)
                 print(f"  {OK} 已清理测试草稿")
-        except WechatApiError as err:
+        except (WechatApiError, httpx.HTTPError) as err:
             print(f"  {WARN} 清理未完成，请到公众号后台手动删除测试内容：{err}")
+    return ok
 
 
 def _probe_freepublish(wechat: WechatClient) -> tuple[str, str]:

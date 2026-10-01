@@ -171,3 +171,28 @@ def test_resume_from_titlist_reuses_upstream(sandbox):
 
     assert (run_dir / "01_topics.json").read_text(encoding="utf-8") == before
     assert (run_dir / "02_draft.md").read_text(encoding="utf-8") == draft_before
+
+
+def test_resume_from_topics_reuses_same_dir(sandbox):
+    """--from topics --resume 必须写回同一目录，而不是新建 run 目录。"""
+    cfg = _make_cfg(sandbox, mode="draft")
+    run_dir = _run(sandbox, cfg)
+    again = _run(sandbox, cfg, from_stage="topics", resume_dir=run_dir)
+    assert again == run_dir
+
+
+def test_cover_fallback_when_pexels_dead(sandbox, monkeypatch):
+    """图库全挂时本地生成纯色封面兜底，thumb_media_id 不允许为空。"""
+    from autopilot.pipeline import images
+
+    monkeypatch.setattr(images, "_fetch_photo", lambda cfg, kw, exclude_url=None: (None, None))
+    cfg = _make_cfg(sandbox, mode="draft")
+    run_dir = _run(sandbox, cfg)
+
+    import json
+    meta = json.loads((run_dir / "06_meta.json").read_text(encoding="utf-8"))
+    assert meta["fallback_used"] is True
+    assert meta["cover_source"] == "local_fallback"
+    assert meta["cover_media_id"] == "THUMB_MEDIA_1"  # 兜底封面也走素材上传
+    draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
+    assert draft["has_cover"] is True
