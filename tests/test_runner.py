@@ -1,0 +1,173 @@
+"""端到端编排测试：mock LLM 与微信 client，真实执行 runner 七阶段。
+
+覆盖：产物落盘编号、断点重跑（--from）、auto 模式发布路径与 08 产物。
+渲染/检测等纯逻辑走真实实现。
+"""
+
+import shutil
+
+import pytest
+
+from autopilot.config import PROJECT_ROOT, load_config, load_dotenv
+
+MARKDOWN = """上周帮朋友排查慢查询，日志里翻到一条 SQL，盯着看了十秒。
+索引建了四个，全没用上。问题不在数据库，在写 SQL 的人。
+
+## 问题出在哪
+
+执行计划没看过。教科书害人。
+
+```python
+print("hello")
+```
+
+改完之后，查询从 8 秒掉到 0.2 秒。不是玄学，是基本功。
+
+## 一点感受
+
+工具没问题，问题总在人。
+"""
+
+
+class FakeLLM:
+    usage_tokens = 100
+
+    def __init__(self, cfg, stage=None):
+        self.stage = stage or ""
+
+    def chat(self, system, user, **kw):
+        if self.stage == "writer":
+            return MARKDOWN
+        if self.stage == "humanizer":
+            return MARKDOWN
+        if self.stage == "digest":
+            return "一篇讲慢查询排查的实战复盘，两分钟读完。"
+        return "technology code"  # images 环节的英文关键词
+
+    def chat_json(self, system, user):
+        if self.stage == "topics":
+            return {"candidates": [
+                {"title_direction": "一次慢查询排查复盘", "angle": "从执行计划说起",
+                 "target_reader": "后端开发者", "click_reason": "痛点共鸣", "risk": "无", "score": 9},
+                {"title_direction": "数据库索引避坑", "angle": "索引失效场景",
+                 "target_reader": "全栈", "click_reason": "干货清单", "risk": "无", "score": 7},
+            ]}
+        if self.stage == "titlist":
+            return {"candidates": [
+                {"title": "查询从8秒到0.2秒，我只改了一行代码", "type": "数字", "hook": "反差", "score": 9},
+                {"title": "索引建了四个全没用上，问题出在这", "type": "痛点", "hook": "痛点", "score": 8},
+            ]}
+        raise AssertionError(f"unexpected stage {self.stage}")
+
+
+class FakeWechat:
+    def __init__(self, app_id, app_secret, http=None):
+        pass
+
+    def add_material(self, path, material_type="thumb"):
+        return "THUMB_MEDIA_1"
+
+    def upload_content_image(self, path):
+        return "https://mmbiz.qpic.cn/mmbiz_jpg/fake/body.jpg"
+
+    def add_draft(self, articles):
+        assert articles[0]["thumb_media_id"] == "THUMB_MEDIA_1"
+        return "DRAFT_MEDIA_1"
+
+    def freepublish_submit(self, draft_id):
+        return "PUBLISH_1"
+
+    def freepublish_get(self, publish_id):
+        return {"publish_id": publish_id, "publish_status": 0, "article_id": "ART_1",
+                "article_detail": {"count": 1, "item": [{"article_url": "https://mp.weixin.qq.com/s/ok"}]}}
+
+
+@pytest.fixture
+def sandbox(tmp_path, monkeypatch):
+    """临时项目根：拷贝 prompts/templates，PATCH 各模块的 PROJECT_ROOT 绑定。"""
+    monkeypatch.setenv("WECHAT_APP_ID", "wx-test")
+    monkeypatch.setenv("WECHAT_APP_SECRET", "secret-test")
+    monkeypatch.setenv("PEXELS_API_KEY", "pexels-test")
+    monkeypatch.setenv("LLM_API_KEY", "sk-test")
+    shutil.copytree(PROJECT_ROOT / "prompts", tmp_path / "prompts")
+    shutil.copytree(PROJECT_ROOT / "templates", tmp_path / "templates")
+    from autopilot.pipeline import common, images, publisher, renderer, runner
+
+    for mod in (common, publisher, renderer, runner):
+        monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(runner, "LLM", FakeLLM)
+    monkeypatch.setattr(runner, "WechatClient", FakeWechat)
+    monkeypatch.setattr(publisher, "WechatClient", FakeWechat)
+    monkeypatch.setattr(images, "WechatClient", FakeWechat)
+
+    # 免依赖外网：_fetch_photo 返回本地生成的真实 JPEG
+    from PIL import Image
+
+    photo = tmp_path / "photo.jpg"
+    Image.new("RGB", (1200, 800), (120, 140, 160)).save(photo, "JPEG")
+    monkeypatch.setattr(images, "_fetch_photo",
+                        lambda cfg, kw, exclude_url=None: (photo, "https://images.pexels.com/1.jpeg"))
+    return tmp_path
+
+
+def _make_cfg(tmp_path, mode="auto"):
+    import re
+
+    text = (PROJECT_ROOT / "config.example.toml").read_text(encoding="utf-8")
+    text = text.replace('type = "personal"', 'type = "enterprise"').replace('mode = "draft"', f'mode = "{mode}"')
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(text, encoding="utf-8")
+    return load_config(cfg_file)
+
+
+def _run(tmp_path, cfg, **kw):
+    from autopilot.pipeline.runner import RunOptions, execute
+
+    return execute(cfg, RunOptions(direction="数据库性能", **kw))
+
+
+def test_full_run_auto_publish(sandbox, capsys):
+    cfg = _make_cfg(sandbox, mode="auto")
+    run_dir = _run(sandbox, cfg)
+    out = capsys.readouterr().out
+
+    for name in ("01_topics.json", "02_draft.md", "03_humanized.md", "03_report.json",
+                 "04_titles.json", "05_article.html", "06_meta.json",
+                 "07_draft_result.json", "08_publish_result.json"):
+        assert (run_dir / name).is_file(), f"缺产物 {name}"
+
+    html = (run_dir / "05_article.html").read_text(encoding="utf-8")
+    assert "mmbiz.qpic.cn" in html and "style=" in html
+
+    import json
+    draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
+    assert draft["media_id"] == "DRAFT_MEDIA_1"
+    assert draft["mode"] == "auto"
+    assert "AI 辅助创作" in draft["digest"]
+
+    publish = json.loads((run_dir / "08_publish_result.json").read_text(encoding="utf-8"))
+    assert publish["status"] == 0
+    assert publish["article_urls"] == ["https://mp.weixin.qq.com/s/ok"]
+    assert "已发布" in out
+
+
+def test_full_run_draft_mode(sandbox):
+    cfg = _make_cfg(sandbox, mode="draft")
+    run_dir = _run(sandbox, cfg)
+    assert not (run_dir / "08_publish_result.json").exists()
+    import json
+    draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
+    assert "publish_skipped" not in draft
+    assert "人工" in draft["next_step"]
+
+
+def test_resume_from_titlist_reuses_upstream(sandbox):
+    cfg = _make_cfg(sandbox, mode="draft")
+    run_dir = _run(sandbox, cfg)
+    before = (run_dir / "01_topics.json").read_text(encoding="utf-8")
+    draft_before = (run_dir / "02_draft.md").read_text(encoding="utf-8")
+
+    _run(sandbox, cfg, from_stage="titlist", resume_dir=run_dir)
+
+    assert (run_dir / "01_topics.json").read_text(encoding="utf-8") == before
+    assert (run_dir / "02_draft.md").read_text(encoding="utf-8") == draft_before

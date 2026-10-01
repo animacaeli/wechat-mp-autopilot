@@ -1,0 +1,12 @@
+services:
+  autopilot:
+    build: .
+    env_file: .env
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - ./runs:/app/runs
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # 换成自己的 prompt/范文时挂载覆盖层：
+      # - ./prompts/user:/app/prompts/user:ro
+    command: ["uv", "run", "autopilot", "run"]

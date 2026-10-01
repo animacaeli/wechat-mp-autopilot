@@ -1,0 +1,64 @@
+# ============================================================
+# wechat-mp-autopilot 配置模板
+# 复制为 config.toml 后按注释填写；真实 config.toml 不会进入仓库
+# 敏感值（AppSecret / API key）一律走环境变量（见 .env.example），
+# 本文件只存「环境变量名」。
+# ============================================================
+
+# ── 公众号账号 ──────────────────────────────────────────
+[account]
+# personal   = 个人公众号：流程终点为草稿箱，人工在后台发布
+#              （2025.7 起个人号无 freepublish 发布接口权限）
+# enterprise = 企业认证公众号（订阅号/服务号均可）：可开启全自动发布
+type = "personal"
+
+[wechat]
+app_id_env     = "WECHAT_APP_ID"
+app_secret_env = "WECHAT_APP_SECRET"
+
+# ── 发布策略 ────────────────────────────────────────────
+[publish]
+# draft = 推入草稿箱即止（两类账号均可，默认值）
+# auto  = 草稿 → freepublish/submit 提交发布 → 轮询直至拿到文章链接
+#         联锁：仅 enterprise 可用；personal 配 auto 会在启动时报错
+# 注意：「发布」不推送粉丝会话（群发是另一回事，本项目不自动化群发）
+mode = "draft"
+poll_interval_sec = 30        # auto：freepublish/get 轮询间隔（秒）
+poll_timeout_min  = 60        # auto：轮询超时（分钟）；超时≠失败，可事后补查
+max_per_day       = 1         # 自我频控：单日最多自动发布篇数
+ai_disclosure     = true      # 摘要尾部自动加「AI 辅助创作」标识（合规兜底）
+
+# ── 大模型（任意 OpenAI 兼容端点）──────────────────────
+[llm]
+base_url    = "https://api.deepseek.com/v1"
+api_key_env = "LLM_API_KEY"
+model       = "deepseek-chat"
+temperature = 0.7
+max_tokens  = 4096
+timeout_sec = 120
+
+# 可选：按流水线环节覆盖（缺省继承 [llm]）
+# 可用环节：topics / writer / humanizer / titlist / digest
+# [llm.writer]
+# model = "deepseek-reasoner"
+# temperature = 1.0
+
+# ── 账号定位（选题 agent 的核心输入）────────────────────
+[niche]
+field      = "AI 编程工具与效率"    # 写什么领域
+audience   = "一线开发者"           # 给谁看
+persona    = ""                     # 差异化人设一句话（可空）
+directions = []                     # 常备选题方向池（可空，运行时 --direction 传入）
+
+# ── 风格与排版 ──────────────────────────────────────────
+[style]
+# 写作风格预设：wenyi（文艺）/ ganhuo（干货）/ youmo（幽默）
+preset   = "ganhuo"
+# 排版模板：templates/ 目录下的模板名（clean / wenyi）
+template = "clean"
+
+# ── 配图 ────────────────────────────────────────────────
+[images]
+provider           = "pexels"   # pexels（M3 预留：cogview）
+pexels_api_key_env = "PEXELS_API_KEY"
+fallback_plain     = true       # 取图失败降级为纯文字排版，不阻塞流程

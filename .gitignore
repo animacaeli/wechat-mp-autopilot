@@ -1,0 +1,24 @@
+# 私密配置与密钥（本地填写，绝不入库）
+config.toml
+.env
+
+# 运行产物
+runs/
+data/
+logs/
+
+# 用户私有 prompt 覆盖层（自己的范文等）
+prompts/user/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# 工具
+.DS_Store
+*.log
