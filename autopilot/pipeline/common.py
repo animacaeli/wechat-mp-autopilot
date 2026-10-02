@@ -76,8 +76,28 @@ def _find_skill(stage: str, preset: str | None) -> tuple[str | None, str, str]:
         path = PROJECT_ROOT / "skills" / name / "SKILL.md"
         if path.is_file():
             body, version = _parse_skill(path)
+            bundled = _bundled_resources(path.parent)
+            if bundled:
+                body += "\n\n" + bundled
             return name, body, version
     return None, "", ""
+
+
+def _bundled_resources(skill_dir: Path) -> str:
+    """拼接 skill 目录内 SKILL.md 之外的 .md 捆绑资源（按文件名排序）。
+
+    Agent Skills 惯例允许目录里放 references/ 等语料；本流水线的阶段调用
+    没有文件读取工具，因此把捆绑资料直接并入指令正文。
+    """
+    parts = []
+    for md in sorted(skill_dir.rglob("*.md")):
+        if md.name == "SKILL.md" or md.name == "README.md":
+            continue
+        rel = md.relative_to(skill_dir).as_posix()
+        content = md.read_text(encoding="utf-8").strip()
+        if content:
+            parts.append(f"【捆绑资料：{rel}】\n{content}")
+    return "\n\n".join(parts)
 
 
 def _parse_skill(path: Path) -> tuple[str, str]:

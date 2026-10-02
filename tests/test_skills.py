@@ -88,3 +88,17 @@ def test_skills_report_shape(sandbox):
     assert rows["topics"]["skill"] == "topics@1.0.0"
     assert rows["writer"]["skill"] == "—"  # 未放 skill
     assert set(rows) == {"topics", "writer", "humanize", "titlist", "digest", "cover"}
+
+
+def test_bundled_resources_concatenated(sandbox):
+    """skill 目录里的 references/*.md 应并入指令正文（README/SKILL 除外）。"""
+    _write_skill(sandbox, "digest", "技能正文。")
+    refs = sandbox / "skills" / "digest" / "references"
+    refs.mkdir(parents=True)
+    (refs / "lexicon.md").write_text("词库内容。", encoding="utf-8")
+    (refs / "README.md").write_text("忽略我", encoding="utf-8")
+    body, _ = load_stage_instructions("digest")
+    assert "技能正文。" in body
+    assert "捆绑资料：references/lexicon.md" in body
+    assert "词库内容。" in body
+    assert "忽略我" not in body

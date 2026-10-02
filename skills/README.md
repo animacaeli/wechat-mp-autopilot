@@ -41,6 +41,9 @@ version: 1.0.0
 
 ## 注意事项
 
+- **捆绑资源**：skill 目录内 SKILL.md 之外的所有 `.md`（如 `references/`
+  语料，README.md 除外）会自动并入该阶段指令正文——Agent Skills 的捆绑
+  资料惯例在单次 LLM 调用场景下的等价实现
 - **输出格式契约**：topics / titlist / cover 三个阶段要求 JSON 输出，skill
   正文中必须保留与内置文件相同的 JSON 字段约定（字段名、枚举值），骨架代码
   按这些字段解析；writer / humanize / digest 输出纯文本，格式自由
