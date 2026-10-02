@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from ..config import Config
 from ..llm import LLM, LLMError
-from .common import load_prompt
+from .common import load_stage_instructions
 
 
 def run_titlist(cfg: Config, llm: LLM, article_text: str) -> dict:
-    system, version = load_prompt("titlist.md")
+    system, prov = load_stage_instructions("titlist")
     outline = _outline(article_text)
     user = (
         f"【账号定位】领域：{cfg.niche_field}｜读者：{cfg.audience}\n\n"
@@ -29,7 +29,7 @@ def run_titlist(cfg: Config, llm: LLM, article_text: str) -> dict:
     return {
         "picked": ranked[0],
         "alternates": ranked[1:4],
-        "prompt_version": version,
+        "prompt_version": prov["label"],
     }
 
 

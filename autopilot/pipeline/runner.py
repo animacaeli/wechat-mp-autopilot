@@ -70,7 +70,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
             state = RunState(cfg, _require_resume_dir(opts))
         else:
             state = RunState(cfg, _new_run_dir(topics_result["picked"]["title_direction"]))
-        state.prompt_versions["topic.selector.md"] = topics_result["prompt_version"]
+        state.prompt_versions["topics"] = topics_result["prompt_version"]
         save_json(state.artifact("topics"), topics_result)
         state.track("topics", llm)
         if opts.topic_only:
@@ -89,7 +89,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
 
         llm = LLM(cfg, "writer")
         draft, version = writer_mod.run_writer(cfg, llm, picked)
-        state.prompt_versions[f"writer.{cfg.style_preset}.md"] = version
+        state.prompt_versions["writer"] = version
         state.artifact("writer").write_text(draft, encoding="utf-8")
         state.track("writer", llm)
         print(f"[2/7] 初稿完成：{len(draft)} 字")
@@ -102,7 +102,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
 
         llm = LLM(cfg, "humanizer")
         humanized, report = humanizer_mod.run_humanizer(cfg, llm, draft)
-        state.prompt_versions["humanizer.md"] = report["prompt_version"]
+        state.prompt_versions["humanize"] = report["prompt_version"]
         state.artifact("humanize").write_text(humanized, encoding="utf-8")
         save_json(state.run_dir / "03_report.json", report)
         state.track("humanizer", llm)
@@ -118,7 +118,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
 
         llm = LLM(cfg, "titlist")
         titles = titlist_mod.run_titlist(cfg, llm, humanized)
-        state.prompt_versions["titlist.md"] = titles["prompt_version"]
+        state.prompt_versions["titlist"] = titles["prompt_version"]
         save_json(state.artifact("titlist"), titles)
         state.track("titlist", llm)
         print(f"[4/7] 标题：{titles['picked']['title']}")

@@ -15,7 +15,7 @@ import time
 from ..config import PROJECT_ROOT, Config
 from ..llm import LLM
 from ..wechat.client import WechatClient, parse_publish_result
-from .common import load_prompt
+from .common import load_stage_instructions
 
 
 def run_publish(
@@ -32,7 +32,7 @@ def run_publish(
     prompt_versions: dict,
 ) -> dict:
     digest, digest_version = _make_digest(cfg, llm, article_text)
-    prompt_versions = {**prompt_versions, "digest.md": digest_version}
+    prompt_versions = {**prompt_versions, "digest": digest_version}
 
     article = {
         "title": title,
@@ -86,13 +86,13 @@ def run_publish(
 
 
 def _make_digest(cfg: Config, llm: LLM, article_text: str) -> tuple[str, str]:
-    system, version = load_prompt("digest.md")
+    system, prov = load_stage_instructions("digest")
     digest = llm.chat(system, article_text[:2000]).strip().strip('"“”')
     limit = 110 if cfg.ai_disclosure else 120
     digest = digest[:limit]
     if cfg.ai_disclosure:
         digest += "｜AI 辅助创作"
-    return digest, version
+    return digest, prov["label"]
 
 
 def _poll(wechat: WechatClient, publish_id: str, interval_sec: int, timeout_sec: int):

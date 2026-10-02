@@ -88,10 +88,22 @@ Docker 方式见 `docker-compose.yml`。
 
 敏感信息支持双通道（都配时环境变量优先）：直接填进 `config.toml`（单文件即可跑通），或走 `.env` / 环境变量（适配 Docker `env_file`、systemd、CI secrets 注入，且避免误提交）。
 
-## 自定义 prompt 与范文
+## 用 Skill 定制各阶段能力
 
-- 内置 prompt 在 `prompts/`，版本记录在 `prompts/_meta.json`（每篇 run 会快照所用版本）
-- **你的私货放 `prompts/user/`**（已 gitignore）：同名文件优先于内置目录。写作质量的捷径是把自己的代表作放进 `prompts/user/writer.<风格>.md` 做 few-shot——示例比形容词管用
+各阶段（选题/写作/去AI味/标题/摘要/封面）的专业指令由 **skill** 提供：下载
+Agent Skills 格式的技能包（`SKILL.md`），按目录名放入 `skills/` 即生效，无需
+改代码。加载优先级：
+
+```
+skills/<阶段>/SKILL.md   ← 下载的技能，完全替换内置指令（写作支持 skills/writer.<风格>/ 精确匹配）
+prompts/<对应文件>        ← 仓库内置兜底默认（保证 clone 即能跑）
+prompts/user/<对应文件>   ← 你的补充说明，始终附加（范文 few-shot、项目特有约束）
+```
+
+- `uv run autopilot skills` 查看各阶段当前实际来源
+- 每篇 run 记录各阶段来源标签（如 `skill:writer@1.2`），效果可归因
+- 写作类 skill 里放自己的代表作做 few-shot——示例比形容词管用
+- 注意输出格式契约：topics / titlist / cover 要求 JSON 字段与内置一致，详见 [skills/README.md](skills/README.md)
 
 ## 兼容性矩阵
 

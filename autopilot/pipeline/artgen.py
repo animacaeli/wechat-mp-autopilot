@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..config import Config
 from ..llm import LLM
-from .common import load_prompt
+from .common import load_stage_instructions
 
 COVER_SIZE = (900, 383)
 PATTERN_NAMES = ["waves", "dots", "contour", "mosaic", "beams", "circuit"]
@@ -208,8 +208,10 @@ def generate_cover(title: str, design: dict) -> tuple[Path, dict]:
 def design_and_generate(llm: LLM, cfg: Config, title: str) -> tuple[Path, dict]:
     """LLM 出设计稿 → 渲染。设计环节任何失败都用内置默认设计，绝不阻塞。"""
     design = None
+    source_label = ""
     try:
-        system, _ = load_prompt("cover.designer.md")
+        system, prov = load_stage_instructions("cover")
+        source_label = prov["label"]
         user = f"【文章标题】{title}\n【账号领域】{cfg.niche_field}\n【写作风格】{cfg.style_preset}\n\n请给出封面设计。"
         raw = llm.chat_json(system, user)
         if isinstance(raw, dict):
@@ -223,4 +225,4 @@ def design_and_generate(llm: LLM, cfg: Config, title: str) -> tuple[Path, dict]:
         design = {"pattern": "waves", "palette": DEFAULT_PALETTE, "mood": "内置默认设计（LLM 设计环节失败）"}
 
     path, applied = generate_cover(title, design)
-    return path, {**design, **applied, "pattern_applied": applied["pattern"]}
+    return path, {**design, **applied, "pattern_applied": applied["pattern"], "source": source_label}

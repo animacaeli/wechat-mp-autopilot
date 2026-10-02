@@ -317,24 +317,24 @@ uv run autopilot stats --run runs/xxx                # personal 模式人工补�
 - SQLite 汇总：`prompt版本 × 选题类型 × 标题套路` 与阅读数据的对应关系
 - 月度输出一份「什么选题/标题/风格表现好」的统计报告，作为 prompt 迭代依据
 
-## 7. Prompt 库设计
+## 7. 指令层设计：skill 供给 + 内置兜底 + 用户补充
+
+各阶段的专业指令（v0.4 起）按三层优先级加载，能力与项目解耦：
 
 ```
-prompts/
-├── topic.selector.md    # 选题 agent
-├── writer.wenyi.md      # 写作（按风格分文件）
-├── writer.ganhuo.md
-├── writer.youmo.md
-├── humanizer.md         # 去 AI 味（含中文 AI 味清单全文）
-├── titlist.md           # 标题
-├── digest.md            # 摘要
-└── _meta.json           # 各 prompt 版本号（每篇 run 记录快照）
+skills/<阶段>/SKILL.md    ← 下载的技能（Agent Skills 通用格式），完全替换内置
+        ↓ 无 skill 时兜底
+prompts/<对应文件>          ← 内置默认，保证 clone 即能跑
+        ↓ 始终附加在末尾
+prompts/user/<对应文件>     ← 用户补充说明（项目特有约束、范文 few-shot）
 ```
 
-- 每个 prompt 只干一件事（单一职责，好定位问题好迭代）
-- 写作类 prompt 内嵌 2~3 篇范文 few-shot（**范文属于用户私有内容**，仓库只放示例占位与「如何替换范文」的说明）
-- 迭代规则：改 prompt 必升版本号；不删旧版本；效果对比靠 run 目录里的版本快照 + 阅读数据
-- **用户覆盖层**：用户自己的范文/prompt 微调放 `prompts/user/`（gitignore），同名文件优先于内置目录——官方仓库更新（git pull）永不与用户私有内容冲突
+阶段名映射：`topics` / `writer[.<风格>]`（按风格精确匹配优先于通用 writer）/ `humanize` / `titlist` / `digest` / `cover`。
+
+- 每个 skill 一个目录一个职责；frontmatter 的 name/version 被解析，run 产物记录来源标签（如 `skill:writer@1.2`）实现效果归因
+- 内置 prompt 只干一件事（单一职责，好定位问题好迭代）；改内置必升 `_meta.json` 版本号，不删旧版本
+- **输出格式契约**：topics / titlist / cover 三阶段要求 JSON 字段与内置一致（代码按字段解析）；writer / humanize / digest 输出自由格式。契约写入 skills/README.md，skill 作者须遵守
+- `autopilot skills` 命令一览各阶段实际来源；用户补充层 gitignore，官方仓库更新永不与用户私有内容冲突
 
 ## 8. 合规与风险
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..config import Config
 from ..llm import LLM, LLMError
-from .common import load_prompt
+from .common import load_stage_instructions
 
 # LLM 偶尔会用中文键名，这里做一层别名归一
 _ALIASES = {
@@ -34,7 +34,7 @@ def _normalize(candidate: dict) -> dict | None:
 
 
 def run_topics(cfg: Config, llm: LLM, direction: str, pick: int | None = None) -> dict:
-    system, version = load_prompt("topic.selector.md")
+    system, prov = load_stage_instructions("topics")
     pool = "、".join(cfg.directions) if cfg.directions else "（无常备方向，以本次输入为准）"
     user = (
         f"【账号定位】\n领域：{cfg.niche_field}\n读者：{cfg.audience}\n"
@@ -54,4 +54,4 @@ def run_topics(cfg: Config, llm: LLM, direction: str, pick: int | None = None) -
         idx = max(range(len(candidates)), key=lambda i: candidates[i]["score"])
         reason = "自动取评分最高"
     picked = candidates[idx]
-    return {"candidates": candidates, "picked": picked, "picked_reason": reason, "prompt_version": version}
+    return {"candidates": candidates, "picked": picked, "picked_reason": reason, "prompt_version": prov["label"]}

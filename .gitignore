@@ -7,8 +7,12 @@ runs/
 data/
 logs/
 
-# 用户私有 prompt 覆盖层（自己的范文等）
+# 用户私有 prompt 补充说明层（自己的范文等）
 prompts/user/
+
+# 下载的 skill（能力由用户自备，README 除外）
+skills/*
+!skills/README.md
 
 # Python
 __pycache__/

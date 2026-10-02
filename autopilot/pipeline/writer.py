@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from ..config import Config
 from ..llm import LLM
-from .common import load_prompt, strip_fence
+from .common import load_stage_instructions, strip_fence
 
 
 def run_writer(cfg: Config, llm: LLM, topic: dict) -> tuple[str, str]:
-    """返回 (初稿 markdown, prompt 版本)。"""
-    system, version = load_prompt(f"writer.{cfg.style_preset}.md")
+    """返回 (初稿 markdown, 指令来源标签)。"""
+    system, prov = load_stage_instructions("writer", cfg.style_preset)
     user = (
         f"【账号定位】领域：{cfg.niche_field}｜读者：{cfg.audience}\n"
         f"【选题】{topic.get('title_direction', '')}\n"
@@ -20,4 +20,4 @@ def run_writer(cfg: Config, llm: LLM, topic: dict) -> tuple[str, str]:
         "请输出完整文章正文（markdown，不要标题中的序号前缀，第一行就是引子段落）。"
     )
     draft = llm.chat(system, user)
-    return strip_fence(draft), version
+    return strip_fence(draft), prov["label"]

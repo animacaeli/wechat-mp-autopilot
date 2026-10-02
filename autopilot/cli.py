@@ -71,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_stats.add_argument("--run", type=Path, required=True, help="run 目录")
     p_stats.add_argument("--day", type=int, default=3, choices=[3, 7], help="补录第几天（默认 3）")
 
+    sub.add_parser("skills", help="查看各阶段能力来源（skill / 内置兜底 / 补充说明）")
+
     return parser
 
 
@@ -84,6 +86,7 @@ def main(argv: list[str] | None = None) -> None:
             "status": cmd_status,
             "unpublish": cmd_unpublish,
             "stats": cmd_stats,
+            "skills": cmd_skills,
         }[args.command](args)
     except ConfigError as err:
         print(f"{BAD} [配置错误] {err}", file=sys.stderr)
@@ -357,6 +360,21 @@ def cmd_stats(args) -> None:
     print(f"补录 {run_dir.name} 第 {args.day} 天数据（公众号后台「内容分析」里查看）：")
     record_stats(run_dir, day=args.day)
     print(f"{OK} 已写入 {run_dir / '09_stats.json'}")
+
+
+# ── skills ──────────────────────────────────────────────
+def cmd_skills(args) -> None:
+    from .pipeline.common import skills_report
+
+    print("各阶段能力来源（优先级：skills/<阶段>/SKILL.md → 内置 prompts/ → prompts/user/ 补充）\n")
+    print(f"  {'阶段':<10}{'skill（下载）':<28}{'内置兜底':<28}补充说明")
+    for row in skills_report():
+        supplement = "✓" if row["supplement"] else "—"
+        print(f"  {row['stage']:<10}{row['skill']:<28}{row['builtin']:<28}{supplement}")
+    print(
+        "\n放入方式：把 skill 目录（含 SKILL.md）拷贝为 skills/<阶段名>/，"
+        "写作阶段可用 skills/writer.<风格>/ 精确匹配或 skills/writer/ 通用。详见 skills/README.md。"
+    )
 
 
 if __name__ == "__main__":

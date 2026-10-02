@@ -9,11 +9,11 @@ from __future__ import annotations
 from ..config import Config
 from ..detector import THRESHOLD, detect, summarize_hits
 from ..llm import LLM
-from .common import load_prompt, strip_fence
+from .common import load_stage_instructions, strip_fence
 
 
 def run_humanizer(cfg: Config, llm: LLM, draft: str) -> tuple[str, dict]:
-    system, version = load_prompt("humanizer.md")
+    system, prov = load_stage_instructions("humanize")
     report_before = detect(draft)
 
     text = _rewrite(llm, system, draft, report_before)
@@ -31,7 +31,7 @@ def run_humanizer(cfg: Config, llm: LLM, draft: str) -> tuple[str, dict]:
         "after": report_after,
         "passes": passes,
         "flagged": report_after["score"] >= THRESHOLD,
-        "prompt_version": version,
+        "prompt_version": prov["label"],
     }
     return text, report
 
