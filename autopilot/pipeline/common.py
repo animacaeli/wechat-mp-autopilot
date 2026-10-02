@@ -119,14 +119,21 @@ def _parse_skill(path: Path) -> tuple[str, str]:
     return text.strip(), version
 
 
-def skills_report() -> list[dict]:
-    """各阶段能力来源一览（`autopilot skills` 的数据源）。"""
+def skills_report(preset: str | None = None) -> list[dict]:
+    """各阶段能力来源一览（`autopilot skills` 的数据源）。preset 缺省读当前配置。"""
+    if preset is None:
+        try:
+            from ..config import load_config
+
+            preset = load_config().style_preset
+        except Exception:
+            preset = "ganhuo"
     rows = []
     for stage in ["topics", "writer", "humanize", "titlist", "digest", "cover"]:
         row = {"stage": stage}
-        prompt_file = stage_prompt_file(stage, "ganhuo") if stage == "writer" else stage_prompt_file(stage)
+        prompt_file = stage_prompt_file(stage, preset) if stage == "writer" else stage_prompt_file(stage)
         row["builtin"] = prompt_file
-        skill_dir, _, version = _find_skill(stage, "ganhuo")
+        skill_dir, _, version = _find_skill(stage, preset)
         row["skill"] = f"{skill_dir}@{version}" if skill_dir else "—"
         row["supplement"] = (PROJECT_ROOT / "prompts" / "user" / prompt_file).is_file()
         rows.append(row)
