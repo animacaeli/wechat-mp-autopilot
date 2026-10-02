@@ -57,8 +57,10 @@ def test_interlock_personal_auto_rejected(tmp_path):
 def test_interlock_enterprise_auto_ok(tmp_path):
     text = (PROJECT_ROOT / "config.example.toml").read_text(encoding="utf-8")
     ok = tmp_path / "config.toml"
-    ok.write_text(text.replace('type = "personal"', 'type = "enterprise"')
-                      .replace('mode = "draft"', 'mode = "auto"'), encoding="utf-8")
+    ok.write_text(
+        text.replace('type = "personal"', 'type = "enterprise"').replace('mode = "draft"', 'mode = "auto"'),
+        encoding="utf-8",
+    )
     cfg = load_config(ok)
     assert cfg.publish_mode == "auto"
     assert cfg.with_publish_mode("draft").publish_mode == "draft"
@@ -67,10 +69,13 @@ def test_interlock_enterprise_auto_ok(tmp_path):
 def test_stage_override_inherits_unset_fields(tmp_path):
     text = (PROJECT_ROOT / "config.example.toml").read_text(encoding="utf-8")
     cfg_file = tmp_path / "config.toml"
-    cfg_file.write_text(text.replace(
-        "# [llm.writer]",
-        '[llm.writer]\ntemperature = 1.0',
-    ), encoding="utf-8")
+    cfg_file.write_text(
+        text.replace(
+            "# [llm.writer]",
+            "[llm.writer]\ntemperature = 1.0",
+        ),
+        encoding="utf-8",
+    )
     cfg = load_config(cfg_file)
     writer = cfg.llm.stage("writer")
     assert writer.temperature == 1.0
@@ -80,7 +85,7 @@ def test_stage_override_inherits_unset_fields(tmp_path):
 
 def test_missing_required_field(tmp_path):
     cfg_file = tmp_path / "config.toml"
-    cfg_file.write_text("[account]\ntype = \"personal\"\n", encoding="utf-8")
+    cfg_file.write_text('[account]\ntype = "personal"\n', encoding="utf-8")
     with pytest.raises(ConfigError, match="缺少必填项"):
         load_config(cfg_file)
 
@@ -89,16 +94,59 @@ def test_secret_missing_env(monkeypatch):
     cfg = load_config(PROJECT_ROOT / "config.example.toml")
     monkeypatch.delenv("WECHAT_APP_ID", raising=False)
     with pytest.raises(ConfigError, match="WECHAT_APP_ID"):
-        cfg.app_id
+        _ = cfg.app_id
+
+
+def test_inline_secrets_single_file(tmp_path, monkeypatch):
+    """双通道：直接填值即可单文件跑通，无需任何环境变量。"""
+    for name in ("WECHAT_APP_ID", "WECHAT_APP_SECRET", "LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    cfg_file = _rewrite_example(
+        tmp_path,
+        {
+            r"^(app_id\s*=).*$": r'\1 "wx-inline"',
+            r"^(app_secret\s*=).*$": r'\1 "secret-inline"',
+            r"^(api_key\s*=).*$": r'\1 "sk-inline"',
+        },
+    )
+    cfg = load_config(cfg_file)
+    assert cfg.app_id == "wx-inline"
+    assert cfg.app_secret == "secret-inline"
+    assert cfg.resolve_llm_key(cfg.llm) == "sk-inline"
+
+
+def test_env_overrides_inline_secret(tmp_path, monkeypatch):
+    """双通道同时配置时，环境变量优先（容器/CI 可覆盖文件内值）。"""
+    monkeypatch.setenv("WECHAT_APP_ID", "wx-from-env")
+    cfg_file = _rewrite_example(tmp_path, {r"^(app_id\s*=).*$": r'\1 "wx-inline"'})
+    cfg = load_config(cfg_file)
+    assert cfg.app_id == "wx-from-env"
+
+
+def test_missing_secret_both_channels_rejected(tmp_path, monkeypatch):
+    for name in ("WECHAT_APP_ID", "WECHAT_APP_SECRET", "LLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    cfg_file = _rewrite_example(
+        tmp_path,
+        {
+            r"^app_id_env.*$": "",
+            r"^app_secret_env.*$": "",
+            r"^api_key_env.*$": "",
+        },
+    )
+    with pytest.raises(ConfigError, match="AppID"):
+        load_config(cfg_file)
 
 
 def test_load_dotenv(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
-    env_file.write_text("# 注释\nFOO_ENV_TEST=hello\nBAR_ENV_TEST=\"quoted\"\n", encoding="utf-8")
+    env_file.write_text('# 注释\nFOO_ENV_TEST=hello\nBAR_ENV_TEST="quoted"\n', encoding="utf-8")
     monkeypatch.delenv("FOO_ENV_TEST", raising=False)
     monkeypatch.delenv("BAR_ENV_TEST", raising=False)
     from autopilot.config import load_dotenv
+
     load_dotenv(env_file)
     import os
+
     assert os.environ["FOO_ENV_TEST"] == "hello"
     assert os.environ["BAR_ENV_TEST"] == "quoted"

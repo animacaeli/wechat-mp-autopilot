@@ -1,7 +1,5 @@
 """渲染器测试：微信兼容性约束（inline style、无 class、代码转义、外壳包裹）。"""
 
-import re
-
 from autopilot.pipeline.renderer import render_blocks, render_shell
 
 SAMPLE = """# 主标题不该出现
@@ -65,7 +63,7 @@ def test_wenyi_theme_differs_from_clean():
     clean = "\n".join(render_blocks(SAMPLE, "clean"))
     wenyi = "\n".join(render_blocks(SAMPLE, "wenyi"))
     assert clean != wenyi
-    assert "text-align:justify" in wenyi        # wenyi 段落两端对齐
+    assert "text-align:justify" in wenyi  # wenyi 段落两端对齐
     assert "serif" in render_shell(render_blocks("你好。", "wenyi"), "wenyi")  # 衬线字体在容器层
 
 
@@ -78,7 +76,7 @@ def test_no_external_link_tag():
 
 def test_raw_html_in_text_is_escaped():
     """LLM 可能在正文漏出裸 HTML，必须转义而不是透传（防御性）。"""
-    md = '段落里混入 <script>alert(1)</script> 和 <img src=x onerror=1>。\n'
+    md = "段落里混入 <script>alert(1)</script> 和 <img src=x onerror=1>。\n"
     html = "\n".join(render_blocks(md, "clean"))
     assert "<script>" not in html
     assert "<img src=x" not in html

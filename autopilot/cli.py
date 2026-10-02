@@ -11,9 +11,9 @@ import httpx
 
 from . import __version__
 from .config import (
+    PROJECT_ROOT,
     Config,
     ConfigError,
-    PROJECT_ROOT,
     exit_on_config_error,
     load_config,
     load_dotenv,
@@ -29,7 +29,8 @@ OK, BAD, WARN = "[✓]", "[✗]", "[!]"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="autopilot",
-        description="公众号 AI 自动化写作流水线：选题 → 写作 → 去AI味 → 标题 → 排版 → 配图 → 草稿箱 →（企业号）自动发布",
+        description="公众号 AI 自动化写作流水线：选题 → 写作 → 去AI味 → 标题 → 排版 → 配图"
+        " → 草稿箱 →（企业号）自动发布",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -38,19 +39,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--force", action="store_true", help="覆盖已存在的本地配置")
 
     p_verify = sub.add_parser("verify", help="自检：配置校验 + 微信/模型连通性探测")
-    p_verify.add_argument("--with-publish", action="store_true",
-                          help="企业号全链路实测：发一篇测试草稿并提交发布，随后立即删除（约 1 分钟）")
+    p_verify.add_argument(
+        "--with-publish",
+        action="store_true",
+        help="企业号全链路实测：发一篇测试草稿并提交发布，随后立即删除（约 1 分钟）",
+    )
 
     p_run = sub.add_parser("run", help="跑完整流水线")
     p_run.add_argument("--direction", default="", help="本次选题方向（个人号必填，或写入 config 的 niche.directions）")
     p_run.add_argument("--topic-only", action="store_true", help="只跑选题，人工定方向后再写")
     p_run.add_argument("--pick", type=int, default=None, help="指定选择第几个候选选题（默认自动取最高分）")
-    p_run.add_argument("--publish", choices=["draft", "auto"], default=None,
-                       help="临时覆盖发布模式（联锁校验同样生效）")
+    p_run.add_argument(
+        "--publish", choices=["draft", "auto"], default=None, help="临时覆盖发布模式（联锁校验同样生效）"
+    )
     p_run.add_argument("--resume", type=Path, default=None, help="续跑的 run 目录（配合 --from）")
-    p_run.add_argument("--from", dest="from_stage", metavar="STAGE",
-                       choices=["topics", "writer", "humanize", "titlist", "render", "images", "publish"],
-                       help="从指定阶段重跑（默认从头）")
+    p_run.add_argument(
+        "--from",
+        dest="from_stage",
+        metavar="STAGE",
+        choices=["topics", "writer", "humanize", "titlist", "render", "images", "publish"],
+        help="从指定阶段重跑（默认从头）",
+    )
 
     p_status = sub.add_parser("status", help="补查 auto 发布的轮询状态")
     p_status.add_argument("--run", type=Path, required=True, help="run 目录")
@@ -68,20 +77,26 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     try:
-        {"init": cmd_init, "verify": cmd_verify, "run": cmd_run,
-         "status": cmd_status, "unpublish": cmd_unpublish, "stats": cmd_stats}[args.command](args)
+        {
+            "init": cmd_init,
+            "verify": cmd_verify,
+            "run": cmd_run,
+            "status": cmd_status,
+            "unpublish": cmd_unpublish,
+            "stats": cmd_stats,
+        }[args.command](args)
     except ConfigError as err:
         print(f"{BAD} [配置错误] {err}", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from err
     except WechatApiError as err:
         print(f"{BAD} [微信接口] {err}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from err
     except LLMError as err:
         print(f"{BAD} [模型调用] {err}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from err
     except httpx.HTTPError as err:
         print(f"{BAD} [网络错误] 无法访问微信/模型服务：{err}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from err
 
 
 # ── init ────────────────────────────────────────────────
@@ -100,11 +115,12 @@ def cmd_init(args) -> None:
         print(f"{OK} 已生成 {env_path}")
     print(
         "\n接下来三步：\n"
-        "  1. 编辑 .env 填入 WECHAT_APP_ID / WECHAT_APP_SECRET / LLM_API_KEY\n"
-        "     （图库默认 openverse 免 key；想换 pixabay/pexels 再补对应 key）\n"
+        "  1. 配置密钥（二选一，都配时环境变量优先）：\n"
+        "     a. 直接编辑 config.toml 填 app_id / app_secret / [llm].api_key —— 单文件即可跑\n"
+        "     b. 或编辑 .env 填 WECHAT_APP_ID / WECHAT_APP_SECRET / LLM_API_KEY（推荐服务器/容器部署）\n"
         "  2. 编辑 config.toml：账号类型 [account].type、定位 [niche]、风格 [style]\n"
-        "     （企业认证号想全自动发布：type=\"enterprise\" + [publish].mode=\"auto\"）\n"
-        "  3. 跑 `autopilot verify` 自检，全绿后 `autopilot run --direction \"…\"`\n"
+        '     （企业认证号想全自动发布：type="enterprise" + [publish].mode="auto"）\n'
+        '  3. 跑 `autopilot verify` 自检，全绿后 `autopilot run --direction "…"`\n'
         "注意：公众号后台「设置与开发→基本配置→IP 白名单」需加入本机/服务器出口 IP，否则 token 获取会报 40164。"
     )
 
@@ -114,34 +130,41 @@ def cmd_init(args) -> None:
 def cmd_verify(args) -> None:
     load_dotenv()
     cfg = load_config()
-    print(f"{OK} 配置加载通过：账号类型={cfg.account_type}，发布模式={cfg.publish_mode}，"
-          f"模型={cfg.llm.model} @ {cfg.llm.base_url}")
-    failures = sum([
-        _check_env(cfg),
-        _check_wechat(cfg),
-        _check_freepublish(cfg, with_publish=args.with_publish),
-        _check_llm(cfg),
-    ])
+    print(
+        f"{OK} 配置加载通过：账号类型={cfg.account_type}，发布模式={cfg.publish_mode}，"
+        f"模型={cfg.llm.model} @ {cfg.llm.base_url}"
+    )
+    failures = sum(
+        [
+            _check_env(cfg),
+            _check_wechat(cfg),
+            _check_freepublish(cfg, with_publish=args.with_publish),
+            _check_llm(cfg),
+        ]
+    )
     if failures:
         print(f"\n{BAD} 自检完成：{failures} 项未通过，按上面指引修复后重试。")
         raise SystemExit(1)
-    print("\n自检完成，全部通过。即可 `autopilot run --direction \"…\"` 跑全流程。")
+    print('\n自检完成，全部通过。即可 `autopilot run --direction "…"` 跑全流程。')
 
 
 def _check_env(cfg: Config) -> int:
-    import os
-    checks = [("微信 AppID", cfg.app_id_env), ("微信 AppSecret", cfg.app_secret_env),
-              ("模型 API key", cfg.llm.api_key_env)]
+    checks = [
+        ("微信 AppID", lambda: cfg.app_id),
+        ("微信 AppSecret", lambda: cfg.app_secret),
+        ("模型 API key", lambda: cfg.resolve_llm_key(cfg.llm)),
+    ]
     if cfg.image_provider == "pexels":
-        checks.append(("Pexels key", cfg.pexels_api_key_env))
+        checks.append(("Pexels key", lambda: cfg.pexels_api_key))
     elif cfg.image_provider == "pixabay":
-        checks.append(("Pixabay key", cfg.pixabay_api_key_env))
+        checks.append(("Pixabay key", lambda: cfg.pixabay_api_key))
     failed = 0
-    for label, name in checks:
-        if os.environ.get(name, "").strip():
-            print(f"  {OK} {label}: {name}")
-        else:
-            print(f"  {BAD} {label}: {name} 未设置（.env 里补 {name}）")
+    for label, resolve in checks:
+        try:
+            resolve()
+            print(f"  {OK} {label}：已配置（config.toml 直接值或环境变量）")
+        except ConfigError as err:
+            print(f"  {BAD} {err}")
             failed += 1
     if cfg.image_provider in {"gen", "openverse", "local"}:
         print(f"  {OK} 图库 provider={cfg.image_provider} 免 key")
@@ -190,12 +213,21 @@ def _full_publish_test(wechat: WechatClient) -> bool:
             Image.new("RGB", (900, 383), (240, 240, 240)).save(fh, "JPEG")
             cover = Path(fh.name)
         thumb = wechat.add_material(cover, "thumb")
-        media_id = wechat.add_draft([{
-            "title": "autopilot连通性测试(即将删除)",
-            "content": '<section style="font-size:15px;">autopilot verify --with-publish 的测试文章，即将自动删除。</section>',
-            "digest": "连通性测试", "thumb_media_id": thumb,
-            "need_open_comment": 0, "only_fans_can_comment": 0,
-        }])
+        test_content = (
+            '<section style="font-size:15px;">autopilot verify --with-publish 的测试文章，即将自动删除。</section>'
+        )
+        media_id = wechat.add_draft(
+            [
+                {
+                    "title": "autopilot连通性测试(即将删除)",
+                    "content": test_content,
+                    "digest": "连通性测试",
+                    "thumb_media_id": thumb,
+                    "need_open_comment": 0,
+                    "only_fans_can_comment": 0,
+                }
+            ]
+        )
         print(f"  {OK} 测试草稿已推入（media_id={media_id}）")
 
         publish_id = wechat.freepublish_submit(media_id)

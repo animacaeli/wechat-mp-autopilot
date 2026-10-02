@@ -26,11 +26,13 @@ def record_stats(run_dir, values: dict | None = None, day: int = 3) -> dict:
     existing_path = run_dir / "09_stats.json"
     data = load_json(existing_path) if existing_path.is_file() else {}
     snapshots = data.get("snapshots", [])
-    snapshots.append({
-        "day": day,
-        "recorded_at": dt.datetime.now().isoformat(timespec="seconds"),
-        **payload,
-    })
+    snapshots.append(
+        {
+            "day": day,
+            "recorded_at": dt.datetime.now().isoformat(timespec="seconds"),
+            **payload,
+        }
+    )
     data["snapshots"] = snapshots
     save_json(existing_path, data)
     return data

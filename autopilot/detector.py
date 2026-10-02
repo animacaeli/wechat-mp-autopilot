@@ -14,11 +14,36 @@ import statistics
 THRESHOLD = 40
 
 BLACK_WORDS = [
-    "赋能", "闭环", "抓手", "深耕", "破圈", "生态", "发力", "落地",
-    "不难发现", "值得注意的是", "综上所述", "总而言之", "众所周知",
-    "在当今", "的今天", "随着…的发展", "业内人士", "有观点认为", "有分析认为",
-    "研究表明", "事实证明", "毫无疑问", "未来可期", "让我们拭目以待",
-    "任重道远", "行稳致远", "砥砺前行", "至关重要", "不可或缺", "极大地",
+    "赋能",
+    "闭环",
+    "抓手",
+    "深耕",
+    "破圈",
+    "生态",
+    "发力",
+    "落地",
+    "不难发现",
+    "值得注意的是",
+    "综上所述",
+    "总而言之",
+    "众所周知",
+    "在当今",
+    "的今天",
+    "随着…的发展",
+    "业内人士",
+    "有观点认为",
+    "有分析认为",
+    "研究表明",
+    "事实证明",
+    "毫无疑问",
+    "未来可期",
+    "让我们拭目以待",
+    "任重道远",
+    "行稳致远",
+    "砥砺前行",
+    "至关重要",
+    "不可或缺",
+    "极大地",
 ]
 
 STRUCTURE_WORDS = ["首先", "其次", "再次", "最后", "一方面", "另一方面", "与此同时"]
@@ -43,18 +68,20 @@ def detect(text: str) -> dict:
     if black_hits:
         total = sum(c for _, c in black_hits)
         score += min(6 * total, 30)
-        hits.append({
-            "rule": "八股词汇", "count": total,
-            "samples": [w for w, c in black_hits for _ in range(min(c, 1))][:8],
-        })
+        hits.append(
+            {
+                "rule": "八股词汇",
+                "count": total,
+                "samples": [w for w, c in black_hits for _ in range(min(c, 1))][:8],
+            }
+        )
 
     # 2. 结构八股（首先/其次/最后…）：每个 8 分，上限 24
     struct_hits = [(w, text.count(w)) for w in STRUCTURE_WORDS if w in text]
     if struct_hits:
         total = sum(c for _, c in struct_hits)
         score += min(8 * total, 24)
-        hits.append({"rule": "公式化结构词", "count": total,
-                     "samples": [w for w, _ in struct_hits][:6]})
+        hits.append({"rule": "公式化结构词", "count": total, "samples": [w for w, _ in struct_hits][:6]})
 
     # 3. 「不是X，而是Y」句式：每个 7 分，上限 21
     contrast = re.findall(r"不是[^，。；！？]{1,15}，而是", text)
@@ -102,7 +129,7 @@ def detect(text: str) -> dict:
         hits.append({"rule": "「虽然…但…」空洞让步", "count": len(concessions), "samples": concessions[:3]})
 
     return {
-        "score": int(round(max(0, min(score, 100)))),
+        "score": round(max(0, min(score, 100))),
         "hits": hits,
         "sentence_stats": sent_stats,
     }

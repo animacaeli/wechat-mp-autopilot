@@ -17,14 +17,44 @@ dependencies = [
 autopilot = "autopilot.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "pip-audit>=2.10.1",
+    "pre-commit>=4.6.2",
+    "pytest>=8.0",
+    "ruff>=0.16.10",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# 默认使用清华 PyPI 镜像（本项目主要面向国内用户；海外贡献者可删除此块改用官方源）
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["autopilot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort（import 排序）
+    "UP",  # pyupgrade（现代化语法）
+    "B",   # flake8-bugbear（常见陷阱）
+    "RUF", # ruff 自身规则
+]
+ignore = [
+    "RUF001", # 字符串中的全角标点（本项目是中文项目，全角标点是本体不是笔误）
+    "RUF002", # 注释中的全角标点，同上
+    "RUF003", # docstring 中的全角标点，同上
+]

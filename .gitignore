@@ -18,6 +18,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+requirements.txt
 
 # 工具
 .DS_Store

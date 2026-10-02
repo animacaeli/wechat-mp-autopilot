@@ -62,8 +62,7 @@ def test_draft_add_returns_media_id():
         return ok({"access_token": "T1"})
 
     client, _ = make_client(handler)
-    media_id = client.add_draft([{"title": "标题", "content": "<p>x</p>",
-                                  "digest": "d", "thumb_media_id": "t"}])
+    media_id = client.add_draft([{"title": "标题", "content": "<p>x</p>", "digest": "d", "thumb_media_id": "t"}])
     assert media_id == "DRAFT123"
 
 
@@ -101,13 +100,16 @@ def test_unauthorized_48001_raises():
 
 # ── freepublish 响应解析（fixture 来自官方文档响应结构）────
 
+
 def test_parse_publish_success():
-    result = parse_publish_result({
-        "publish_id": 1,
-        "publish_status": 0,
-        "article_id": "ART1",
-        "article_detail": {"count": 1, "item": [{"article_url": "https://mp.weixin.qq.com/s/abc"}]},
-    })
+    result = parse_publish_result(
+        {
+            "publish_id": 1,
+            "publish_status": 0,
+            "article_id": "ART1",
+            "article_detail": {"count": 1, "item": [{"article_url": "https://mp.weixin.qq.com/s/abc"}]},
+        }
+    )
     assert result["status"] == 0
     assert result["article_urls"] == ["https://mp.weixin.qq.com/s/abc"]
 

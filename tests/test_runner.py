@@ -8,7 +8,7 @@ import shutil
 
 import pytest
 
-from autopilot.config import PROJECT_ROOT, load_config, load_dotenv
+from autopilot.config import PROJECT_ROOT, load_config
 
 MARKDOWN = """上周帮朋友排查慢查询，日志里翻到一条 SQL，盯着看了十秒。
 索引建了四个，全没用上。问题不在数据库，在写 SQL 的人。
@@ -46,17 +46,33 @@ class FakeLLM:
 
     def chat_json(self, system, user):
         if self.stage == "topics":
-            return {"candidates": [
-                {"title_direction": "一次慢查询排查复盘", "angle": "从执行计划说起",
-                 "target_reader": "后端开发者", "click_reason": "痛点共鸣", "risk": "无", "score": 9},
-                {"title_direction": "数据库索引避坑", "angle": "索引失效场景",
-                 "target_reader": "全栈", "click_reason": "干货清单", "risk": "无", "score": 7},
-            ]}
+            return {
+                "candidates": [
+                    {
+                        "title_direction": "一次慢查询排查复盘",
+                        "angle": "从执行计划说起",
+                        "target_reader": "后端开发者",
+                        "click_reason": "痛点共鸣",
+                        "risk": "无",
+                        "score": 9,
+                    },
+                    {
+                        "title_direction": "数据库索引避坑",
+                        "angle": "索引失效场景",
+                        "target_reader": "全栈",
+                        "click_reason": "干货清单",
+                        "risk": "无",
+                        "score": 7,
+                    },
+                ]
+            }
         if self.stage == "titlist":
-            return {"candidates": [
-                {"title": "查询从8秒到0.2秒，我只改了一行代码", "type": "数字", "hook": "反差", "score": 9},
-                {"title": "索引建了四个全没用上，问题出在这", "type": "痛点", "hook": "痛点", "score": 8},
-            ]}
+            return {
+                "candidates": [
+                    {"title": "查询从8秒到0.2秒，我只改了一行代码", "type": "数字", "hook": "反差", "score": 9},
+                    {"title": "索引建了四个全没用上，问题出在这", "type": "痛点", "hook": "痛点", "score": 8},
+                ]
+            }
         if self.stage == "":  # images 环节：gen 封面的美术指导调用
             return {"pattern": "waves", "palette": ["#24344d", "#4d6a8f", "#aebfd6"], "mood": "沉稳科技"}
         raise AssertionError(f"unexpected stage {self.stage}")
@@ -80,8 +96,12 @@ class FakeWechat:
         return "PUBLISH_1"
 
     def freepublish_get(self, publish_id):
-        return {"publish_id": publish_id, "publish_status": 0, "article_id": "ART_1",
-                "article_detail": {"count": 1, "item": [{"article_url": "https://mp.weixin.qq.com/s/ok"}]}}
+        return {
+            "publish_id": publish_id,
+            "publish_status": 0,
+            "article_id": "ART_1",
+            "article_detail": {"count": 1, "item": [{"article_url": "https://mp.weixin.qq.com/s/ok"}]},
+        }
 
 
 @pytest.fixture
@@ -107,8 +127,9 @@ def sandbox(tmp_path, monkeypatch):
 
     photo = tmp_path / "photo.jpg"
     Image.new("RGB", (1200, 800), (120, 140, 160)).save(photo, "JPEG")
-    monkeypatch.setattr(images, "_fetch_photo",
-                        lambda cfg, kw, exclude_url=None: (photo, "https://images.pexels.com/1.jpeg"))
+    monkeypatch.setattr(
+        images, "_fetch_photo", lambda cfg, kw, exclude_url=None: (photo, "https://images.pexels.com/1.jpeg")
+    )
     return tmp_path
 
 
@@ -135,15 +156,24 @@ def test_full_run_auto_publish(sandbox, capsys):
     run_dir = _run(sandbox, cfg)
     out = capsys.readouterr().out
 
-    for name in ("01_topics.json", "02_draft.md", "03_humanized.md", "03_report.json",
-                 "04_titles.json", "05_article.html", "06_meta.json",
-                 "07_draft_result.json", "08_publish_result.json"):
+    for name in (
+        "01_topics.json",
+        "02_draft.md",
+        "03_humanized.md",
+        "03_report.json",
+        "04_titles.json",
+        "05_article.html",
+        "06_meta.json",
+        "07_draft_result.json",
+        "08_publish_result.json",
+    ):
         assert (run_dir / name).is_file(), f"缺产物 {name}"
 
     html = (run_dir / "05_article.html").read_text(encoding="utf-8")
     assert "mmbiz.qpic.cn" in html and "style=" in html
 
     import json
+
     draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
     assert draft["media_id"] == "DRAFT_MEDIA_1"
     assert draft["mode"] == "auto"
@@ -160,6 +190,7 @@ def test_full_run_draft_mode(sandbox):
     run_dir = _run(sandbox, cfg)
     assert not (run_dir / "08_publish_result.json").exists()
     import json
+
     draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
     assert "publish_skipped" not in draft
     assert "人工" in draft["next_step"]
@@ -194,6 +225,7 @@ def test_cover_fallback_when_gallery_dead(sandbox, monkeypatch):
     run_dir = _run(sandbox, cfg)
 
     import json
+
     meta = json.loads((run_dir / "06_meta.json").read_text(encoding="utf-8"))
     assert meta["fallback_used"] is True
     assert meta["cover_source"] == "local_fallback"
@@ -208,6 +240,7 @@ def test_provider_gen_ai_cover(sandbox):
     run_dir = _run(sandbox, cfg)
 
     import json
+
     meta = json.loads((run_dir / "06_meta.json").read_text(encoding="utf-8"))
     assert meta["cover_source"] == "ai_generated"
     assert meta["cover_design"]["pattern"] == "waves"
@@ -229,6 +262,7 @@ def test_provider_local_never_touches_network(sandbox, monkeypatch):
     run_dir = _run(sandbox, cfg)
 
     import json
+
     meta = json.loads((run_dir / "06_meta.json").read_text(encoding="utf-8"))
     assert meta["cover_source"] == "local"
     assert meta["cover_media_id"] == "THUMB_MEDIA_1"
@@ -240,12 +274,15 @@ def test_fetch_photo_dispatch_by_provider(tmp_path, monkeypatch):
     from autopilot.pipeline import images
 
     calls = []
-    monkeypatch.setattr(images, "_fetch_pexels",
-                        lambda cfg, kw, exclude_url=None: calls.append("pexels") or (None, None))
-    monkeypatch.setattr(images, "_fetch_pixabay",
-                        lambda cfg, kw, exclude_url=None: calls.append("pixabay") or (None, None))
-    monkeypatch.setattr(images, "_fetch_openverse",
-                        lambda kw, exclude_url=None: calls.append("openverse") or (None, None))
+    monkeypatch.setattr(
+        images, "_fetch_pexels", lambda cfg, kw, exclude_url=None: calls.append("pexels") or (None, None)
+    )
+    monkeypatch.setattr(
+        images, "_fetch_pixabay", lambda cfg, kw, exclude_url=None: calls.append("pixabay") or (None, None)
+    )
+    monkeypatch.setattr(
+        images, "_fetch_openverse", lambda kw, exclude_url=None: calls.append("openverse") or (None, None)
+    )
 
     for provider in ("pexels", "pixabay", "openverse"):
         cfg = _make_cfg(tmp_path, provider=provider)

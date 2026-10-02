@@ -18,9 +18,7 @@ def load_prompt(name: str) -> tuple[str, str]:
     if user_path.is_file():
         return user_path.read_text(encoding="utf-8"), "user"
     if not builtin.is_file():
-        raise FileNotFoundError(
-            f"prompt 文件不存在：prompts/{name}（内置目录与 prompts/user/ 覆盖层都没有）"
-        )
+        raise FileNotFoundError(f"prompt 文件不存在：prompts/{name}（内置目录与 prompts/user/ 覆盖层都没有）")
     return builtin.read_text(encoding="utf-8"), _meta().get(name, "0")
 
 

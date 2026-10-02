@@ -12,16 +12,25 @@ import datetime as dt
 import json
 import time
 
-from ..config import Config, PROJECT_ROOT
+from ..config import PROJECT_ROOT, Config
 from ..llm import LLM
 from ..wechat.client import WechatClient, parse_publish_result
 from .common import load_prompt
 
 
-def run_publish(cfg: Config, wechat: WechatClient, llm: LLM, *,
-                html: str, title: str, article_text: str,
-                cover_media_id: str | None, humanize_report: dict,
-                usage_summary: dict, prompt_versions: dict) -> dict:
+def run_publish(
+    cfg: Config,
+    wechat: WechatClient,
+    llm: LLM,
+    *,
+    html: str,
+    title: str,
+    article_text: str,
+    cover_media_id: str | None,
+    humanize_report: dict,
+    usage_summary: dict,
+    prompt_versions: dict,
+) -> dict:
     digest, digest_version = _make_digest(cfg, llm, article_text)
     prompt_versions = {**prompt_versions, "digest.md": digest_version}
 
@@ -95,8 +104,12 @@ def _poll(wechat: WechatClient, publish_id: str, interval_sec: int, timeout_sec:
             final["polled_at"] = dt.datetime.now().isoformat(timespec="seconds")
             return final
         time.sleep(max(interval_sec, 3))
-    return {"status": None, "status_text": "轮询超时（发布可能仍在进行）", "article_urls": [],
-            "polled_at": dt.datetime.now().isoformat(timespec="seconds")}
+    return {
+        "status": None,
+        "status_text": "轮询超时（发布可能仍在进行）",
+        "article_urls": [],
+        "polled_at": dt.datetime.now().isoformat(timespec="seconds"),
+    }
 
 
 def _published_today() -> int:

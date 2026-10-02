@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..config import Config, PROJECT_ROOT
+from ..config import PROJECT_ROOT, Config
 from ..llm import LLM, UsageTracker
 from ..wechat.client import WechatClient
 from .common import load_json, save_json
@@ -62,6 +62,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
         if not opts.direction:
             raise SystemExit("请用 --direction 提供本次选题方向（或写入 config 的 niche.directions）。")
         from ..pipeline import topics as topics_mod
+
         llm = LLM(cfg, "topics")
         topics_result = topics_mod.run_topics(cfg, llm, opts.direction, opts.pick)
         if opts.from_stage == "topics":
@@ -85,6 +86,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     # ── ② 写作 ───────────────────────────────────────────
     if from_index <= 1:
         from ..pipeline import writer as writer_mod
+
         llm = LLM(cfg, "writer")
         draft, version = writer_mod.run_writer(cfg, llm, picked)
         state.prompt_versions[f"writer.{cfg.style_preset}.md"] = version
@@ -97,6 +99,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     # ── ③ 去AI味 ─────────────────────────────────────────
     if from_index <= 2:
         from ..pipeline import humanizer as humanizer_mod
+
         llm = LLM(cfg, "humanizer")
         humanized, report = humanizer_mod.run_humanizer(cfg, llm, draft)
         state.prompt_versions["humanizer.md"] = report["prompt_version"]
@@ -112,6 +115,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     # ── ④ 标题 ───────────────────────────────────────────
     if from_index <= 3:
         from ..pipeline import titlist as titlist_mod
+
         llm = LLM(cfg, "titlist")
         titles = titlist_mod.run_titlist(cfg, llm, humanized)
         state.prompt_versions["titlist.md"] = titles["prompt_version"]
@@ -125,6 +129,7 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     # ── ⑤ 排版渲染 ───────────────────────────────────────
     if from_index <= 4:
         from ..pipeline import renderer as renderer_mod
+
         blocks = renderer_mod.render_blocks(humanized, cfg.style_template)
         save_json(state.artifact("render"), {"template": cfg.style_template, "blocks": blocks})
         print(f"[5/7] 排版：{len(blocks)} 个内容块（{cfg.style_template} 模板）")
@@ -134,15 +139,20 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     # ── ⑥ 配图 ───────────────────────────────────────────
     if from_index <= 5:
         from ..pipeline import images as images_mod
+
         wechat = WechatClient(cfg.app_id, cfg.app_secret)
         images_llm = LLM(cfg)
         html, meta = images_mod.run_images(cfg, wechat, images_llm, list(blocks), title)
         state.track("images", images_llm)
         (state.run_dir / "05_article.html").write_text(html, encoding="utf-8")
         save_json(state.artifact("images"), meta)
-        cover_info = ("封面 + 正文图" if meta.get("body_images")
-                      else "仅封面" if meta.get("cover_media_id")
-                      else "无封面（草稿推送可能被微信拒绝）")
+        cover_info = (
+            "封面 + 正文图"
+            if meta.get("body_images")
+            else "仅封面"
+            if meta.get("cover_media_id")
+            else "无封面（草稿推送可能被微信拒绝）"
+        )
         if meta.get("fallback_used"):
             cover_info += f"，图库降级：{meta.get('fallback_reason', '')[:60]}"
         print(f"[6/7] 配图：{cover_info}")
@@ -152,11 +162,16 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
 
     # ── ⑦ 草稿 +（auto）发布 ─────────────────────────────
     from ..pipeline import publisher as publisher_mod
+
     wechat = WechatClient(cfg.app_id, cfg.app_secret)
     digest_llm = LLM(cfg, "digest")
     result = publisher_mod.run_publish(
-        cfg, wechat, digest_llm,
-        html=html, title=title, article_text=humanized,
+        cfg,
+        wechat,
+        digest_llm,
+        html=html,
+        title=title,
+        article_text=humanized,
         cover_media_id=meta.get("cover_media_id"),
         humanize_report=report,
         usage_summary=state.usage.summary(),
@@ -165,12 +180,15 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     state.track("digest", digest_llm)
     save_json(state.artifact("publish"), result)
     if "publish_id" in result:
-        save_json(state.run_dir / "08_publish_result.json", {
-            k: v for k, v in result.items()
-            if k in ("publish_id", "status", "status_text", "article_id", "article_urls", "polled_at", "next_step")
-        })
-    print(f"[7/7] {'已发布' if result.get('status') == 0 else '已推入草稿箱'}"
-          f"（media_id={result['media_id']}）")
+        save_json(
+            state.run_dir / "08_publish_result.json",
+            {
+                k: v
+                for k, v in result.items()
+                if k in ("publish_id", "status", "status_text", "article_id", "article_urls", "polled_at", "next_step")
+            },
+        )
+    print(f"[7/7] {'已发布' if result.get('status') == 0 else '已推入草稿箱'}（media_id={result['media_id']}）")
     if result.get("publish_skipped"):
         print(f"      自动发布未执行：{result['next_step']}")
     elif cfg.publish_mode == "draft":

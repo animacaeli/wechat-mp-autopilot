@@ -69,6 +69,7 @@ def _fit_line(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> str
 
 # ── 图案库：全部在 RGBA overlay 上绘制，颜色带 alpha ─────────
 
+
 def _pattern_waves(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
     for i in range(4):
         base_y = h * (0.18 + 0.2 * i) + rng.randint(-14, 14)
@@ -77,7 +78,7 @@ def _pattern_waves(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
         phase = rng.uniform(0, 6.28)
         color = accents[i % len(accents)]
         pts = [(x, base_y + amp * math.sin(k * x / w * 6.283 + phase)) for x in range(0, w + 8, 8)]
-        d.line(pts, fill=color + (70 + i * 22,), width=rng.randint(10, 26))
+        d.line(pts, fill=(*color, 70 + i * 22), width=rng.randint(10, 26))
 
 
 def _pattern_dots(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
@@ -90,7 +91,7 @@ def _pattern_dots(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
             if r < 0.7:
                 continue
             color = accents[rng.randrange(len(accents))]
-            d.ellipse([x - r, y - r, x + r, y + r], fill=color + (110,))
+            d.ellipse([x - r, y - r, x + r, y + r], fill=(*color, 110))
 
 
 def _pattern_contour(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
@@ -105,7 +106,7 @@ def _pattern_contour(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
             radius = r0 + 10 * math.sin(k * rad + phase) + ring * 3 * math.sin(3 * rad + phase)
             pts.append((cx + radius * math.cos(rad), cy + radius * math.sin(rad)))
         color = accents[ring % len(accents)]
-        d.line(pts, fill=color + (60 + ring * 3,), width=2)
+        d.line(pts, fill=(*color, 60 + ring * 3), width=2)
 
 
 def _pattern_mosaic(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
@@ -115,7 +116,7 @@ def _pattern_mosaic(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
         size = rng.randint(30, 110)
         pts = [(x + rng.randint(-size, size), y + rng.randint(-size, size)) for _ in range(3)]
         color = colors[rng.randrange(len(colors))]
-        d.polygon(pts, fill=color + (rng.randint(26, 60),))
+        d.polygon(pts, fill=(*color, rng.randint(26, 60)))
 
 
 def _pattern_beams(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
@@ -126,7 +127,7 @@ def _pattern_beams(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
         color = accents[i % len(accents)]
         d.polygon(
             [(x0, 0), (x0 + width, 0), (x0 + width - slope * h, h), (x0 - slope * h, h)],
-            fill=color + (rng.randint(30, 55),),
+            fill=(*color, rng.randint(30, 55)),
         )
 
 
@@ -143,9 +144,9 @@ def _pattern_circuit(d: ImageDraw.ImageDraw, bg, accents, rng, w, h):
             else:
                 y = min(max(y + rng.choice((-1, 1)) * grid * rng.randint(1, 3), -20), h + 20)
             pts.append((x, y))
-        d.line(pts, fill=accent + (120,), width=2)
+        d.line(pts, fill=(*accent, 120), width=2)
         for px, py in pts:
-            d.ellipse([px - 3, py - 3, px + 3, py + 3], fill=accent + (180,))
+            d.ellipse([px - 3, py - 3, px + 3, py + 3], fill=(*accent, 180))
 
 
 _PATTERNS = {
@@ -159,6 +160,7 @@ _PATTERNS = {
 
 
 # ── 设计与渲染 ────────────────────────────────────────────
+
 
 def _validate_palette(raw) -> list[str] | None:
     if not isinstance(raw, list) or not 2 <= len(raw) <= 4:
@@ -208,17 +210,13 @@ def design_and_generate(llm: LLM, cfg: Config, title: str) -> tuple[Path, dict]:
     design = None
     try:
         system, _ = load_prompt("cover.designer.md")
-        user = (
-            f"【文章标题】{title}\n【账号领域】{cfg.niche_field}\n"
-            f"【写作风格】{cfg.style_preset}\n\n请给出封面设计。"
-        )
+        user = f"【文章标题】{title}\n【账号领域】{cfg.niche_field}\n【写作风格】{cfg.style_preset}\n\n请给出封面设计。"
         raw = llm.chat_json(system, user)
         if isinstance(raw, dict):
             pattern = raw.get("pattern")
             palette = _validate_palette(raw.get("palette"))
             if pattern in PATTERN_NAMES and palette:
-                design = {"pattern": pattern, "palette": palette,
-                          "mood": str(raw.get("mood", ""))[:60]}
+                design = {"pattern": pattern, "palette": palette, "mood": str(raw.get("mood", ""))[:60]}
     except Exception:
         design = None
     if design is None:

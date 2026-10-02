@@ -38,8 +38,7 @@ PIXABAY_SEARCH = "https://pixabay.com/api/"
 OPENVERSE_SEARCH = "https://api.openverse.org/v1/images/"
 
 
-def run_images(cfg: Config, wechat: WechatClient, llm: LLM,
-               blocks: list[str], title: str) -> tuple[str, dict]:
+def run_images(cfg: Config, wechat: WechatClient, llm: LLM, blocks: list[str], title: str) -> tuple[str, dict]:
     meta: dict = {"cover_media_id": None, "body_images": [], "fallback_used": False}
     cover_src_url = None
 
@@ -110,7 +109,7 @@ def _fetch_pexels(cfg: Config, keywords: str, exclude_url: str | None = None) ->
     resp = httpx.get(
         PEXELS_SEARCH,
         params={"query": keywords, "per_page": 10, "orientation": "landscape"},
-        headers={"Authorization": cfg.secret(cfg.pexels_api_key_env)},
+        headers={"Authorization": cfg.pexels_api_key},
         timeout=20,
     )
     resp.raise_for_status()
@@ -129,9 +128,14 @@ def _fetch_pexels(cfg: Config, keywords: str, exclude_url: str | None = None) ->
 def _fetch_pixabay(cfg: Config, keywords: str, exclude_url: str | None = None) -> tuple[Path | None, str | None]:
     resp = httpx.get(
         PIXABAY_SEARCH,
-        params={"key": cfg.secret(cfg.pixabay_api_key_env), "q": keywords,
-                "image_type": "photo", "orientation": "horizontal",
-                "per_page": 10, "safesearch": "true"},
+        params={
+            "key": cfg.pixabay_api_key,
+            "q": keywords,
+            "image_type": "photo",
+            "orientation": "horizontal",
+            "per_page": 10,
+            "safesearch": "true",
+        },
         timeout=20,
     )
     resp.raise_for_status()
@@ -213,8 +217,7 @@ def _local_cover(title: str) -> Path:
         draw = ImageDraw.Draw(img)
         text = _fit_line(draw, title, font, img.width - 120)
         width = draw.textlength(text, font=font)
-        draw.text(((img.width - width) / 2, (img.height - 70) / 2), text,
-                  font=font, fill=(255, 255, 255))
+        draw.text(((img.width - width) / 2, (img.height - 70) / 2), text, font=font, fill=(255, 255, 255))
     out = Path(tempfile.gettempdir()) / f"autopilot-cover-{int(time.time() * 1000)}.jpg"
     img.save(out, "JPEG", quality=88)
     return out
@@ -226,7 +229,7 @@ def _gradient(size: tuple[int, int], c1: tuple[int, int, int], c2: tuple[int, in
     w, h = size
     for x in range(w):
         t = x / (w - 1)
-        draw.line([(x, 0), (x, h)], fill=tuple(int(a + (b - a) * t) for a, b in zip(c1, c2)))
+        draw.line([(x, 0), (x, h)], fill=tuple(int(a + (b - a) * t) for a, b in zip(c1, c2, strict=False)))
     return img
 
 
@@ -249,4 +252,4 @@ def _splice_image(blocks: list[str], url: str) -> list[str]:
         return [f'<img src="{url}" style="width:100%;border-radius:6px;margin:12px auto;display:block;"/>']
     pos = max(len(blocks) * 2 // 5, 1)
     img_html = f'<img src="{url}" style="width:100%;border-radius:6px;margin:12px auto;display:block;"/>'
-    return blocks[:pos] + [img_html] + blocks[pos:]
+    return [*blocks[:pos], img_html, *blocks[pos:]]

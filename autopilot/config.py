@@ -1,7 +1,12 @@
 """配置加载与校验。
 
-一切账号差异、模型差异收敛于 config.toml；敏感值只存环境变量名，
-实际取值在本模块按名字解析。校验不过立即抛 ConfigError 并给出修复指引
+一切账号差异、模型差异收敛于 config.toml。密钥支持两种填法（双通道）：
+
+1. 直接填值（``app_id = "wx..."``）——单文件快速上手，config.toml 已 gitignore
+2. 只填 ``*_env`` 变量名，真实值放 .env / 服务器环境变量——适配 Docker
+   ``env_file``、systemd、CI secrets 等标准注入通道，也避免误提交
+
+两者都写时以环境变量优先。校验不过立即抛 ConfigError 并给出修复指引
 （fail fast，不静默降级）。
 """
 
@@ -41,9 +46,10 @@ class LLMConfig:
     temperature: float
     max_tokens: int
     timeout_sec: int
+    api_key_direct: str = ""
     stages: dict[str, LLMStageConfig] = field(default_factory=dict)
 
-    def stage(self, name: str) -> "LLMConfig":
+    def stage(self, name: str) -> LLMConfig:
         """返回某环节生效后的配置（覆盖值优先，其余继承全局）。"""
         ov = self.stages.get(name, LLMStageConfig())
         return LLMConfig(
@@ -53,6 +59,7 @@ class LLMConfig:
             temperature=ov.temperature if ov.temperature is not None else self.temperature,
             max_tokens=ov.max_tokens if ov.max_tokens is not None else self.max_tokens,
             timeout_sec=self.timeout_sec,
+            api_key_direct=self.api_key_direct,
         )
 
 
@@ -77,25 +84,31 @@ class Config:
     pexels_api_key_env: str
     pixabay_api_key_env: str
     fallback_plain: bool
+    app_id_direct: str = ""
+    app_secret_direct: str = ""
+    pexels_api_key_direct: str = ""
+    pixabay_api_key_direct: str = ""
 
-    def secret(self, env_name: str) -> str:
-        value = os.environ.get(env_name, "").strip()
-        if not value:
-            raise ConfigError(
-                f"环境变量 {env_name} 未设置。请在 .env 或服务器环境中填写，"
-                f"变量名来自 config.toml 中对应的 *_env 字段。"
-            )
-        return value
+    def resolve_llm_key(self, llm: LLMConfig) -> str:
+        return _resolve_secret(llm.api_key_direct, llm.api_key_env, "模型 API key")
 
     @property
     def app_id(self) -> str:
-        return self.secret(self.app_id_env)
+        return _resolve_secret(self.app_id_direct, self.app_id_env, "微信公众号 AppID")
 
     @property
     def app_secret(self) -> str:
-        return self.secret(self.app_secret_env)
+        return _resolve_secret(self.app_secret_direct, self.app_secret_env, "微信公众号 AppSecret")
 
-    def with_publish_mode(self, mode: str) -> "Config":
+    @property
+    def pexels_api_key(self) -> str:
+        return _resolve_secret(self.pexels_api_key_direct, self.pexels_api_key_env, "Pexels API key")
+
+    @property
+    def pixabay_api_key(self) -> str:
+        return _resolve_secret(self.pixabay_api_key_direct, self.pixabay_api_key_env, "Pixabay API key")
+
+    def with_publish_mode(self, mode: str) -> Config:
         """CLI --publish 临时覆盖发布模式；同样走联锁校验。"""
         data = dict(self.__dict__)
         data["publish_mode"] = mode
@@ -119,6 +132,20 @@ def load_dotenv(path: Path | None = None) -> None:
             os.environ[key] = value
 
 
+def _resolve_secret(direct: str, env_name: str, label: str) -> str:
+    """双通道密钥解析，环境变量优先（容器/CI 可覆盖文件内值），其次直接值。"""
+    if env_name and env_name.strip():
+        value = os.environ.get(env_name.strip(), "").strip()
+        if value:
+            return value
+    if direct and direct.strip():
+        return direct.strip()
+    raise ConfigError(
+        f"{label} 未配置：在 config.toml 中直接填写对应字段，"
+        f"或设置环境变量 {env_name or '（*_env 字段指定的名字）'}（可写入 .env）。"
+    )
+
+
 def _require(data: dict, section: str, key: str):
     value = data.get(section, {}).get(key)
     if value is None or (isinstance(value, str) and not value.strip()):
@@ -131,13 +158,18 @@ def _has(data: dict, section: str, key: str) -> bool:
     return value is not None and (not isinstance(value, str) or bool(value.strip()))
 
 
+def _secret_path_present(data: dict, section: str, base: str) -> bool:
+    """密钥的双通道至少配了一条：直接值（base）或环境变量名（base_env）。"""
+    return _has(data, section, base) or _has(data, section, f"{base}_env")
+
+
 def validate_publish_interlock(cfg: Config) -> None:
     if cfg.publish_mode == "auto" and cfg.account_type != "enterprise":
         raise ConfigError(
-            "publish.mode = \"auto\" 需要 account.type = \"enterprise\"。"
+            'publish.mode = "auto" 需要 account.type = "enterprise"。'
             "个人公众号自 2025.7 起无发布接口权限，只能推到草稿箱后人工发布；"
-            f"当前 account.type = \"{cfg.account_type}\"。"
-            "如只需推草稿，请把 [publish].mode 改回 \"draft\"。"
+            f'当前 account.type = "{cfg.account_type}"。'
+            '如只需推草稿，请把 [publish].mode 改回 "draft"。'
         )
 
 
@@ -145,44 +177,51 @@ def load_config(path: Path | None = None) -> Config:
     cfg_path = path or PROJECT_ROOT / "config.toml"
     if not cfg_path.is_file():
         raise ConfigError(
-            f"找不到 {cfg_path}。请先复制模板：cp config.example.toml config.toml，"
-            "或运行 `autopilot init`。"
+            f"找不到 {cfg_path}。请先复制模板：cp config.example.toml config.toml，或运行 `autopilot init`。"
         )
     data = loads(cfg_path.read_text(encoding="utf-8"))
 
     account_type = _require(data, "account", "type")
     if account_type not in ACCOUNT_TYPES:
-        raise ConfigError(f"[account].type 只能是 {' / '.join(sorted(ACCOUNT_TYPES))}，当前为 \"{account_type}\"。")
+        raise ConfigError(f'[account].type 只能是 {" / ".join(sorted(ACCOUNT_TYPES))}，当前为 "{account_type}"。')
 
     publish_mode = _require(data, "publish", "mode")
     if publish_mode not in PUBLISH_MODES:
-        raise ConfigError(f"[publish].mode 只能是 {' / '.join(sorted(PUBLISH_MODES))}，当前为 \"{publish_mode}\"。")
+        raise ConfigError(f'[publish].mode 只能是 {" / ".join(sorted(PUBLISH_MODES))}，当前为 "{publish_mode}"。')
+
+    for base, label in (("app_id", "微信公众号 AppID"), ("app_secret", "微信公众号 AppSecret")):
+        if not _secret_path_present(data, "wechat", base):
+            raise ConfigError(
+                f"[wechat] 缺少 {label}：直接填 {base}，或用 {base}_env 指定环境变量"
+                f"（参照 config.example.toml 的双通道注释）。"
+            )
+    if not _secret_path_present(data, "llm", "api_key"):
+        raise ConfigError("[llm] 缺少模型 API key：直接填 api_key，或用 api_key_env 指定环境变量。")
 
     style_preset = _require(data, "style", "preset")
     if style_preset not in STYLE_PRESETS:
-        raise ConfigError(f"[style].preset 只能是 {' / '.join(sorted(STYLE_PRESETS))}，当前为 \"{style_preset}\"。")
+        raise ConfigError(f'[style].preset 只能是 {" / ".join(sorted(STYLE_PRESETS))}，当前为 "{style_preset}"。')
 
     image_provider = str(data.get("images", {}).get("provider", "gen"))
     if image_provider not in IMAGE_PROVIDERS:
         raise ConfigError(
-            f"[images].provider 只能是 {' / '.join(sorted(IMAGE_PROVIDERS))}，当前为 \"{image_provider}\"。"
+            f'[images].provider 只能是 {" / ".join(sorted(IMAGE_PROVIDERS))}，当前为 "{image_provider}"。'
         )
-    if image_provider == "pexels" and not _has(data, "images", "pexels_api_key_env"):
+    if image_provider == "pexels" and not _secret_path_present(data, "images", "pexels_api_key"):
         raise ConfigError(
-            "[images].provider = \"pexels\" 需要配置 pexels_api_key_env"
+            '[images].provider = "pexels" 需要配置 pexels_api_key 或 pexels_api_key_env'
             "（注意：Pexels 官方已暂停发放新 API key，老 key 仍可用）。"
         )
-    if image_provider == "pixabay" and not _has(data, "images", "pixabay_api_key_env"):
+    if image_provider == "pixabay" and not _secret_path_present(data, "images", "pixabay_api_key"):
         raise ConfigError(
-            "[images].provider = \"pixabay\" 需要配置 pixabay_api_key_env"
+            '[images].provider = "pixabay" 需要配置 pixabay_api_key 或 pixabay_api_key_env'
             "（pixabay.com/api/docs 免费注册即得）。"
         )
 
     style_template = _require(data, "style", "template")
     if not (PROJECT_ROOT / "templates" / f"{style_template}.html.j2").is_file():
         raise ConfigError(
-            f"[style].template = \"{style_template}\" 不存在，"
-            f"templates/ 目录下可用模板：{_available_templates()}。"
+            f'[style].template = "{style_template}" 不存在，templates/ 目录下可用模板：{_available_templates()}。'
         )
 
     llm_raw = data.get("llm", {})
@@ -196,8 +235,8 @@ def load_config(path: Path | None = None) -> Config:
             )
     cfg = Config(
         account_type=account_type,
-        app_id_env=_require(data, "wechat", "app_id_env"),
-        app_secret_env=_require(data, "wechat", "app_secret_env"),
+        app_id_env=str(data.get("wechat", {}).get("app_id_env", "WECHAT_APP_ID")),
+        app_secret_env=str(data.get("wechat", {}).get("app_secret_env", "WECHAT_APP_SECRET")),
         publish_mode=publish_mode,
         poll_interval_sec=int(data.get("publish", {}).get("poll_interval_sec", 30)),
         poll_timeout_min=int(data.get("publish", {}).get("poll_timeout_min", 60)),
@@ -205,11 +244,12 @@ def load_config(path: Path | None = None) -> Config:
         ai_disclosure=bool(data.get("publish", {}).get("ai_disclosure", True)),
         llm=LLMConfig(
             base_url=_require(data, "llm", "base_url"),
-            api_key_env=_require(data, "llm", "api_key_env"),
+            api_key_env=str(llm_raw.get("api_key_env", "LLM_API_KEY")),
             model=_require(data, "llm", "model"),
             temperature=float(llm_raw.get("temperature", 0.7)),
             max_tokens=int(llm_raw.get("max_tokens", 4096)),
             timeout_sec=int(llm_raw.get("timeout_sec", 120)),
+            api_key_direct=str(llm_raw.get("api_key", "") or ""),
             stages=stages,
         ),
         niche_field=_require(data, "niche", "field"),
@@ -222,6 +262,10 @@ def load_config(path: Path | None = None) -> Config:
         pexels_api_key_env=str(data.get("images", {}).get("pexels_api_key_env", "PEXELS_API_KEY")),
         pixabay_api_key_env=str(data.get("images", {}).get("pixabay_api_key_env", "PIXABAY_API_KEY")),
         fallback_plain=bool(data.get("images", {}).get("fallback_plain", True)),
+        app_id_direct=str(data.get("wechat", {}).get("app_id", "") or ""),
+        app_secret_direct=str(data.get("wechat", {}).get("app_secret", "") or ""),
+        pexels_api_key_direct=str(data.get("images", {}).get("pexels_api_key", "") or ""),
+        pixabay_api_key_direct=str(data.get("images", {}).get("pixabay_api_key", "") or ""),
     )
     validate_publish_interlock(cfg)
     return cfg

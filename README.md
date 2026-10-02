@@ -86,7 +86,7 @@ Docker 方式见 `docker-compose.yml`。
 | `[style].template` | 排版模板：`clean` / `wenyi` |
 | `[images].provider` | 配图来源：`gen`（默认，AI 美术指导 + 本地程序化渲染，零图库依赖）/ `local`（固定渐变封面）/ `openverse`（免 key 图库）/ `pixabay`（免费 key）/ `pexels`（已停发新 key，仅老用户） |
 
-敏感值（AppSecret、各家 API key）只存环境变量名，实际值放 `.env`（已 gitignore）。
+敏感信息支持双通道（都配时环境变量优先）：直接填进 `config.toml`（单文件即可跑通），或走 `.env` / 环境变量（适配 Docker `env_file`、systemd、CI secrets 注入，且避免误提交）。
 
 ## 自定义 prompt 与范文
 
@@ -115,11 +115,20 @@ Docker 方式见 `docker-compose.yml`。
 ## 开发
 
 ```bash
-uv sync                       # 安装依赖（含 dev）
-uv run pytest                 # 单测：配置联锁 / AI味检测器 / 渲染器 / 微信 client（fixture 驱动，不发真实请求）
+make install      # 安装依赖（含 dev 工具；或 uv sync）
+make test         # 全量测试（fixture 驱动，不发真实请求）
+make lint         # ruff 检查 + 格式检查
+make fmt          # 自动修复 + 格式化
+make audit        # 依赖漏洞扫描（pip-audit；CI 中自动跑）
+make ci           # 本地模拟 CI（lint + test + audit）
+make precommit    # 安装 git hooks：提交前 lint，推送前跑全量测试
 ```
 
+CI（GitHub Actions）：push/PR 自动跑 lint、Python 3.11/3.12/3.13 矩阵测试、pip-audit 依赖漏洞扫描，见 [ci.yml](.github/workflows/ci.yml)。
+
 架构与决策记录见 [docs/plan.md](docs/plan.md)。
+
+**国内网络提示**：`pyproject.toml` 已默认配置清华 PyPI 镜像（`[[tool.uv.index]]`，海外贡献者可删除）；pre-commit 首次安装需克隆 GitHub hook 仓库，可能需要代理；`make audit` 依赖 PyPI/OSV 在线查询，也可只在 CI 里跑。运行时依赖（微信 API、DeepSeek、生图封面）均国内直连可用。
 
 ## License
 

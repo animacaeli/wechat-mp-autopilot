@@ -24,9 +24,7 @@ class WechatClient:
         self.app_id = app_id
         self.app_secret = app_secret
         # 连接级失败（握手/连接重置）自动重试 2 次；业务错误码另行处理
-        self._http = http or httpx.Client(
-            timeout=30, transport=httpx.HTTPTransport(retries=2)
-        )
+        self._http = http or httpx.Client(timeout=30, transport=httpx.HTTPTransport(retries=2))
         self._token: str | None = None
         self._token_expire_at = 0.0
 
@@ -45,22 +43,28 @@ class WechatClient:
         self._token_expire_at = time.time() + int(data.get("expires_in", 7200)) - 600
         return self._token
 
-    def _request(self, method: str, path: str, *, json_payload: dict | None = None,
-                 params: dict | None = None, files: dict | None = None,
-                 _retry_token: bool = True) -> dict:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict | None = None,
+        params: dict | None = None,
+        files: dict | None = None,
+        _retry_token: bool = True,
+    ) -> dict:
         merged = {"access_token": self.get_token()}
         if params:
             merged.update(params)
-        resp = self._http.request(
-            method, f"{API_HOST}{path}", params=merged, json=json_payload, files=files
-        )
+        resp = self._http.request(method, f"{API_HOST}{path}", params=merged, json=json_payload, files=files)
         data = resp.json()
         errcode = int(data.get("errcode", 0) or 0)
         if errcode:
             if errcode in TOKEN_EXPIRED_CODES and _retry_token:
                 self.get_token(force_refresh=True)
-                return self._request(method, path, json_payload=json_payload, params=params,
-                                     files=files, _retry_token=False)
+                return self._request(
+                    method, path, json_payload=json_payload, params=params, files=files, _retry_token=False
+                )
             raise WechatApiError(errcode, str(data.get("errmsg", "")), path)
         return data
 
@@ -72,7 +76,8 @@ class WechatClient:
         """正文图：media/uploadimg，返回可在正文中使用的微信域名 URL。"""
         with open(image_path, "rb") as fh:
             data = self._request(
-                "POST", "/cgi-bin/media/uploadimg",
+                "POST",
+                "/cgi-bin/media/uploadimg",
                 files={"media": (image_path.name, fh, _image_mime(image_path))},
             )
         return data["url"]
@@ -81,7 +86,8 @@ class WechatClient:
         """永久素材（封面用）：material/add_material，返回 thumb media_id。"""
         with open(image_path, "rb") as fh:
             data = self._request(
-                "POST", "/cgi-bin/material/add_material",
+                "POST",
+                "/cgi-bin/material/add_material",
                 params={"type": material_type},
                 files={"media": (image_path.name, fh, _image_mime(image_path))},
             )

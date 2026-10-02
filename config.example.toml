@@ -13,8 +13,14 @@
 type = "personal"
 
 [wechat]
-app_id_env     = "WECHAT_APP_ID"
-app_secret_env = "WECHAT_APP_SECRET"
+# 密钥双通道（两者都配时以环境变量优先）：
+#   a. 直接填值（app_id / app_secret）——单文件快速上手；config.toml 已 gitignore 不会入库
+#   b. 只填 *_env 变量名，真实值放 .env / 服务器环境变量——适配 Docker env_file、
+#      systemd、CI secrets 等标准注入通道
+app_id          = ""
+app_secret      = ""
+app_id_env      = "WECHAT_APP_ID"
+app_secret_env  = "WECHAT_APP_SECRET"
 
 # ── 发布策略 ────────────────────────────────────────────
 [publish]
@@ -31,6 +37,7 @@ ai_disclosure     = true      # 摘要尾部自动加「AI 辅助创作」标识
 # ── 大模型（任意 OpenAI 兼容端点）──────────────────────
 [llm]
 base_url    = "https://api.deepseek.com/v1"
+api_key     = ""               # 直接填，或留空走下面的 api_key_env 环境变量
 api_key_env = "LLM_API_KEY"
 model       = "deepseek-chat"
 temperature = 0.7
@@ -68,6 +75,8 @@ template = "clean"
 #   pexels    = 官方已暂停发放新 API key（2025 起），仅已有 key 的用户可用
 # 远程取图失败都会自动降级为本地渐变封面（封面素材是草稿的必需品）
 provider            = "gen"
-pexels_api_key_env  = "PEXELS_API_KEY"   # 仅 provider = "pexels" 时需要
-pixabay_api_key_env = "PIXABAY_API_KEY"  # 仅 provider = "pixabay" 时需要
+pexels_api_key      = ""             # 仅 provider = "pexels" 时需要（直接填或走 *_env）
+pexels_api_key_env  = "PEXELS_API_KEY"
+pixabay_api_key     = ""             # 仅 provider = "pixabay" 时需要
+pixabay_api_key_env = "PIXABAY_API_KEY"
 fallback_plain      = true               # 取图失败降级为本地封面，不阻塞流程

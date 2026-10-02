@@ -53,8 +53,7 @@ THEMES: dict[str, dict[str, str]] = {
         "img": "display:block;width:100%;border-radius:6px;margin:12px auto;",
         "link": "color:#576b95;",
         "footer": (
-            "margin-top:32px;padding-top:16px;border-top:1px solid #eee;"
-            "font-size:12px;color:#b0b0b0;text-align:center;"
+            "margin-top:32px;padding-top:16px;border-top:1px solid #eee;font-size:12px;color:#b0b0b0;text-align:center;"
         ),
     },
     "wenyi": {
@@ -64,8 +63,7 @@ THEMES: dict[str, dict[str, str]] = {
         ),
         "p": "margin:0 0 24px;font-size:15px;color:#2b2b2b;line-height:1.9;letter-spacing:1px;text-align:justify;",
         "h2": (
-            "margin:34px 0 18px;text-align:center;font-size:16px;font-weight:bold;"
-            "color:#4a4a4a;letter-spacing:3px;"
+            "margin:34px 0 18px;text-align:center;font-size:16px;font-weight:bold;color:#4a4a4a;letter-spacing:3px;"
         ),
         "h3": "margin:28px 0 14px;font-size:15px;font-weight:bold;color:#4a4a4a;letter-spacing:2px;",
         "quote": (
@@ -85,14 +83,10 @@ THEMES: dict[str, dict[str, str]] = {
             "background:#f0ece5;color:#8c6d4f;padding:2px 5px;border-radius:3px;"
             "font-family:Menlo,Consolas,monospace;font-size:14px;"
         ),
-        "hr": (
-            "margin:32px auto;width:30%;border:none;border-top:1px solid #c9b8a8;"
-        ),
+        "hr": ("margin:32px auto;width:30%;border:none;border-top:1px solid #c9b8a8;"),
         "img": "display:block;width:100%;margin:16px auto;border-radius:2px;",
         "link": "color:#8c6d4f;",
-        "footer": (
-            "margin-top:36px;text-align:center;font-size:12px;color:#b3a89b;letter-spacing:2px;"
-        ),
+        "footer": ("margin-top:36px;text-align:center;font-size:12px;color:#b3a89b;letter-spacing:2px;"),
     },
 }
 

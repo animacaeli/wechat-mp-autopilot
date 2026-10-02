@@ -76,7 +76,7 @@
 
 ## 4. 配置设计（本项目的门面）
 
-所有账号差异、模型差异收敛于一个 `config.toml`。仓库内提交 `config.example.toml` 作为文档与模板，真实 `config.toml` 与 `.env` 均 gitignore。**敏感值（AppSecret、API key）一律走环境变量，config 里只存变量名。**
+所有账号差异、模型差异收敛于一个 `config.toml`。仓库内提交 `config.example.toml` 作为文档与模板，真实 `config.toml` 与 `.env` 均 gitignore。**密钥双通道**：直接填值（单文件快速上手）或 `*_env` 引用环境变量（适配 Docker env_file / systemd / CI secrets，且避免误提交）；两者都配时以环境变量优先。
 
 ```toml
 # config.example.toml — 复制为 config.toml 后填写
@@ -397,15 +397,18 @@ M0 放在最前：**在作者自己的真实账号上实测草稿路径**。企�
 
 ```
 wechat-mp-autopilot/
-├── pyproject.toml
+├── pyproject.toml          # ruff/pytest 配置 + 清华 PyPI 镜像（国内优先，海外可删）
+├── Makefile                # install/test/lint/fmt/audit/precommit/ci
+├── .pre-commit-config.yaml # pre-commit: ruff+通用检查；pre-push: 全量测试
 ├── README.md                # 开源门面：quickstart、双账号模式说明、配置项表、免责声明
 ├── LICENSE
 ├── .gitignore               # config.toml / .env / runs/ / data/ / logs/
 ├── config.example.toml      # 见第 4 节
 ├── .env.example
-├── Dockerfile
+├── Dockerfile               # 含 CJK 字体（封面标题叠加依赖）
 ├── docker-compose.yml
 ├── .github/
+│   ├── workflows/ci.yml     # lint + 3.11/3.12/3.13 矩阵测试 + pip-audit
 │   └── ISSUE_TEMPLATE/     # 实测报告 / bug 报告模板（收集企业号用户的验证反馈）
 ├── autopilot/
 │   ├── cli.py               # CLI 入口

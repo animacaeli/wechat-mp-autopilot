@@ -27,7 +27,7 @@ class LLM:
         self.effective = eff
         self.client = OpenAI(
             base_url=eff.base_url,
-            api_key=cfg.secret(eff.api_key_env),
+            api_key=cfg.resolve_llm_key(eff),
             timeout=eff.timeout_sec,
             max_retries=2,
         )
@@ -43,9 +43,7 @@ class LLM:
         }
         try:
             if json_mode:
-                resp = self.client.chat.completions.create(
-                    response_format={"type": "json_object"}, **kwargs
-                )
+                resp = self.client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
             else:
                 resp = self.client.chat.completions.create(**kwargs)
         except Exception:
