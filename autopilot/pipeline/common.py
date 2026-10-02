@@ -140,17 +140,6 @@ def skills_report(preset: str | None = None) -> list[dict]:
     return rows
 
 
-def load_prompt(name: str) -> tuple[str, str]:
-    """直接读内置/用户 prompt 文件（遗留接口，仅供补充说明场景使用）。"""
-    builtin = PROJECT_ROOT / "prompts" / name
-    user_path = PROJECT_ROOT / "prompts" / "user" / name
-    if user_path.is_file():
-        return user_path.read_text(encoding="utf-8"), "user"
-    if not builtin.is_file():
-        raise FileNotFoundError(f"prompt 文件不存在：prompts/{name}")
-    return builtin.read_text(encoding="utf-8"), _meta().get(name, "0")
-
-
 def _meta() -> dict:
     meta_path = PROJECT_ROOT / "prompts" / "_meta.json"
     if meta_path.is_file():

@@ -1,5 +1,9 @@
 # wechat-mp-autopilot
 
+[![CI](https://github.com/<owner>/wechat-mp-autopilot/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/wechat-mp-autopilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+
 公众号 AI 自动化写作流水线。一条命令（或一个 cron）跑完：
 
 **选题 → 写作 → 去AI味 → 标题优化 → 排版渲染 → 配图 → 推入草稿箱 →（企业认证号）自动发布**
@@ -9,6 +13,17 @@
 - **产物落盘 + 断点重跑**：每篇文章独立 `runs/日期-slug/` 目录，每步产物可检视，任一步不满意可 `--from humanize` 从该步重跑
 - **去 AI 味双保险**：LLM 重写 + 纯规则检测器（0~100 AI 味指数）；auto 发布模式下指数超标自动降级为只推草稿
 - **刻意的克制**：不引入 LangChain/CrewAI（线性管道更透明）、不做 Web UI、不做群发自动化
+- **AI 生成的封面与配图**：大模型当美术指导（选图案定配色），本地程序化渲染——零图库依赖、无版权、国内直连
+
+<details>
+<summary><b>AI 生成封面效果（点击展开）</b></summary>
+
+| waves · 层叠飘带 | circuit · 电路走线 | mosaic · 几何拼贴 |
+|:---:|:---:|:---:|
+| ![waves](docs/assets/waves.jpg) | ![circuit](docs/assets/circuit.jpg) | ![mosaic](docs/assets/mosaic.jpg) |
+
+图案与配色由 LLM 按文章标题与账号定位决定，正文小节装饰条与封面同风格同配色。
+</details>
 
 ```
 方向输入 ─▶ ①选题 ─▶ ②写作 ─▶ ③去AI味 ─▶ ④标题 ─▶ ⑤排版 ─▶ ⑥配图 ─▶ ⑦草稿箱
@@ -51,13 +66,15 @@ uv run autopilot run --direction "你的选题方向"
 ### 日常命令
 
 ```bash
-uv run autopilot run --direction "AI 编程工具实测"          # 全流程
+uv run autopilot init                                  # 生成 config.toml + .env 并给出填写指引
+uv run autopilot skills                                # 查看各阶段能力来源（skill/内置/补充）
+uv run autopilot run --direction "AI 编程工具实测"      # 全流程
 uv run autopilot run --resume runs/2026-10-01-xxx --from humanize   # 从某步重跑
-uv run autopilot run --topic-only --direction "..."         # 只要选题
-uv run autopilot verify --with-publish                      # 企业号全链路实测（发测试文后即删）
-uv run autopilot status --run runs/xxx                      # 补查自动发布的轮询状态
-uv run autopilot unpublish --run runs/xxx                   # 回滚误发（freepublish/delete）
-uv run autopilot stats --run runs/xxx --day 3               # 人工补录第 3 天阅读数据
+uv run autopilot run --topic-only --direction "..."    # 只要选题
+uv run autopilot verify --with-publish                 # 企业号全链路实测（发测试文后即删）
+uv run autopilot status --run runs/xxx                 # 补查自动发布的轮询状态
+uv run autopilot unpublish --run runs/xxx              # 回滚误发（freepublish/delete）
+uv run autopilot stats --run runs/xxx --day 3          # 人工补录第 3 天阅读数据
 ```
 
 ### 定时（固定服务器）
@@ -67,7 +84,16 @@ uv run autopilot stats --run runs/xxx --day 3               # 人工补录第 3 
 0 8 * * * cd /opt/wechat-mp-autopilot && uv run autopilot run >> logs/cron.log 2>&1
 ```
 
-Docker 方式见 `docker-compose.yml`。
+Docker 方式：
+
+```bash
+cp config.example.toml config.toml && $EDITOR config.toml   # 填密钥与定位（或用 .env + env_file）
+docker compose build
+# run 子命令需要选题方向：要么 config 里 niche.directions 非空，要么追加参数传方向
+docker compose run autopilot -- --direction "你的选题方向"
+```
+
+镜像内置 CJK 字体（封面标题叠加依赖），`runs/`、`data/`、`logs/` 已挂载持久化。
 
 ## 配置一览（config.toml）
 

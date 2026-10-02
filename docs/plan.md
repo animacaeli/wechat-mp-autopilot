@@ -3,7 +3,7 @@
 > 状态：**已确认 v0.3**（2026-10-01 审核通过，开发启动）
 > v0.1 → v0.2：定位开源项目、固定服务器部署、双账号类型（企业号可全自动发布）、全配置驱动
 > v0.2 → v0.3 变化：确立「什么类型都有可能」原则——项目不对任何具体账号类型做设计假设，账号真实权限一律以 `autopilot verify` 运行时探测为准；企业发布路径按文档 + fixture 用例实现，靠社区实测闭环
-> 实施进度（2026-10-01）：M0+M1 代码骨架已落地（七阶段流水线、verify 自检、31 项单测/集成测试全绿、Docker/README/issue 模板）；待办＝真实个人号跑 `autopilot verify` + `run` 完成 M0 实测闭环
+> 实施进度（2026-10-02 更新）：**M0+M1 已实测闭环**——个人订阅号 verify 全绿、首篇 AI 产出文章已入草稿箱（AI 味 38→24、封面/标题/摘要/装饰条全链路 skill 驱动）；随后按阅读反馈补齐自动分节保底与小节装饰条。代码 69 项测试全绿；skill 供给体系、密钥双通道、CI/Makefile/pre-commit、Docker 均已就位。待办＝企业号路径社区实测（README 兼容性矩阵）、M2 打磨、M3 数据回流
 > 审核方式：直接在本文档上批注，或逐条回复「需要你确认的决策点」（见第 10 节）
 
 ## 1. 项目目标
@@ -87,8 +87,11 @@ type = "personal"          # personal  = 个人公众号（流程终点：草稿
                            # enterprise = 企业认证公众号（可开全自动发布）
 
 [wechat]
-app_id_env     = "WECHAT_APP_ID"
-app_secret_env = "WECHAT_APP_SECRET"
+# 密钥双通道（都配时环境变量优先）：直接填值，或只填 *_env 变量名走 .env/服务器环境变量
+app_id          = ""
+app_secret      = ""
+app_id_env      = "WECHAT_APP_ID"
+app_secret_env  = "WECHAT_APP_SECRET"
 
 # ── 发布策略 ────────────────────────────────────────────
 [publish]
@@ -128,9 +131,12 @@ template = "clean"          # templates/ 下的 Jinja2 模板名
 
 # ── 配图 ────────────────────────────────────────────────
 [images]
-provider         = "pexels" # M3 预留：pexels | cogview（生图）
-pexels_api_key_env = "PEXELS_API_KEY"
-fallback_plain   = true     # 取图失败降级为纯文字排版，不阻塞流程
+# gen = AI 生成封面+小节装饰条（默认，LLM 美术指导+程序化渲染）
+# local = 本地渐变封面；openverse/pixabay/pexels = 海外图库（国内需代理）
+provider            = "gen"
+pexels_api_key_env  = "PEXELS_API_KEY"   # 仅 provider = "pexels" 时需要
+pixabay_api_key_env = "PIXABAY_API_KEY"  # 仅 provider = "pixabay" 时需要
+fallback_plain      = true     # 取图失败降级为本地封面，不阻塞流程
 ```
 
 ```bash
@@ -391,7 +397,7 @@ M0 放在最前：**在作者自己的真实账号上实测草稿路径**。企�
 待确认（仅剩两项）：
 
 5. **LICENSE**：默认 MIT（无异议则建仓库时定下）
-6. **API key**（你自己的 dogfooding 用）：DeepSeek API key、微信公众号 AppID/AppSecret + IP 白名单（注意本机调试时 IP 不在白名单会 40164，M0 实测在服务器上做，或临时把本机 IP 加进白名单）。图库默认 `local` 免 key；海外图库（openverse/pixabay/pexels）国内不可达需代理，已不作为默认依赖
+6. **API key**（你自己的 dogfooding 用）：DeepSeek API key、微信公众号 AppID/AppSecret + IP 白名单（注意本机调试时 IP 不在白名单会 40164，M0 实测在服务器上做，或临时把本机 IP 加进白名单）。图库默认 `gen` 免 key；海外图库（openverse/pixabay/pexels）国内不可达需代理，已不作为默认依赖
 
 ## 11. 拟定目录结构（M1 落地形态）
 

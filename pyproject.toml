@@ -5,6 +5,18 @@ description = "公众号 AI 自动化写作流水线：选题 → 写作 → 去
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
+authors = [{ name = "wechat-mp-autopilot contributors" }]
+keywords = ["wechat", "official-account", "公众号", "ai-writing", "automation", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Chinese (Simplified)",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: News/Diary",
+]
 dependencies = [
     "openai>=1.40,<2",
     "httpx>=0.27,<1",
@@ -12,6 +24,10 @@ dependencies = [
     "mistune>=3.0,<4",
     "pillow>=10.0,<12",
 ]
+# 推送到 GitHub 后把 <owner> 替换为实际仓库地址
+[project.urls]
+Homepage = "https://github.com/<owner>/wechat-mp-autopilot"
+Issues = "https://github.com/<owner>/wechat-mp-autopilot/issues"
 
 [project.scripts]
 autopilot = "autopilot.cli:main"
