@@ -79,6 +79,8 @@ class FakeLLM:
 
 
 class FakeWechat:
+    last_article = None
+
     def __init__(self, app_id, app_secret, http=None):
         pass
 
@@ -90,6 +92,7 @@ class FakeWechat:
 
     def add_draft(self, articles):
         assert articles[0]["thumb_media_id"] == "THUMB_MEDIA_1"
+        FakeWechat.last_article = articles[0]
         return "DRAFT_MEDIA_1"
 
     def freepublish_submit(self, draft_id):

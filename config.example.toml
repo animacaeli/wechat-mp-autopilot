@@ -33,6 +33,8 @@ poll_interval_sec = 30        # auto：freepublish/get 轮询间隔（秒）
 poll_timeout_min  = 60        # auto：轮询超时（分钟）；超时≠失败，可事后补查
 max_per_day       = 1         # 自我频控：单日最多自动发布篇数
 ai_disclosure     = true      # 摘要尾部自动加「AI 辅助创作」标识（合规兜底）
+open_comment      = true      # 草稿默认开启留言（need_open_comment；账号须有留言功能）
+only_fans_comment = false     # false=所有人可留言，true=仅关注者可留言
 
 # ── 大模型（任意 OpenAI 兼容端点）──────────────────────
 [llm]

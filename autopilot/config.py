@@ -86,6 +86,8 @@ class Config:
     fallback_plain: bool
     app_id_direct: str = ""
     schedule_cron: str = "0 8 * * *"
+    open_comment: bool = True
+    only_fans_comment: bool = False
     app_secret_direct: str = ""
     pexels_api_key_direct: str = ""
     pixabay_api_key_direct: str = ""
@@ -182,6 +184,8 @@ ENV_OVERRIDES: dict[str, tuple[str, str, str]] = {
     "AUTOPILOT_PUBLISH_MODE": ("publish", "mode", "str"),
     "AUTOPILOT_PUBLISH_MAX_PER_DAY": ("publish", "max_per_day", "int"),
     "AUTOPILOT_PUBLISH_AI_DISCLOSURE": ("publish", "ai_disclosure", "bool"),
+    "AUTOPILOT_PUBLISH_OPEN_COMMENT": ("publish", "open_comment", "bool"),
+    "AUTOPILOT_PUBLISH_ONLY_FANS_COMMENT": ("publish", "only_fans_comment", "bool"),
     "AUTOPILOT_POLL_INTERVAL_SEC": ("publish", "poll_interval_sec", "int"),
     "AUTOPILOT_POLL_TIMEOUT_MIN": ("publish", "poll_timeout_min", "int"),
     "AUTOPILOT_LLM_BASE_URL": ("llm", "base_url", "str"),
@@ -327,6 +331,8 @@ def load_config(path: Path | None = None) -> Config:
         poll_timeout_min=int(data.get("publish", {}).get("poll_timeout_min", 60)),
         max_per_day=int(data.get("publish", {}).get("max_per_day", 1)),
         ai_disclosure=bool(data.get("publish", {}).get("ai_disclosure", True)),
+        open_comment=bool(data.get("publish", {}).get("open_comment", True)),
+        only_fans_comment=bool(data.get("publish", {}).get("only_fans_comment", False)),
         llm=LLMConfig(
             base_url=_require(data, "llm", "base_url"),
             api_key_env=str(llm_raw.get("api_key_env", "LLM_API_KEY")),

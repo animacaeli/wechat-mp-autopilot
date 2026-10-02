@@ -207,3 +207,17 @@ def test_env_bad_int_rejected(tmp_path, no_autopilot_env, monkeypatch):
     cfg_file = _rewrite_example(tmp_path, {})
     with pytest.raises(ConfigError, match="AUTOPILOT_PUBLISH_MAX_PER_DAY"):
         load_config(cfg_file)
+
+
+def test_comment_defaults_and_env_override(tmp_path, no_autopilot_env, monkeypatch):
+    """留言默认开启；AUTOPILOT_* 可关闭或收紧为仅粉丝可评。"""
+    cfg_file = _rewrite_example(tmp_path, {})
+    cfg = load_config(cfg_file)
+    assert cfg.open_comment is True
+    assert cfg.only_fans_comment is False
+
+    monkeypatch.setenv("AUTOPILOT_PUBLISH_OPEN_COMMENT", "false")
+    monkeypatch.setenv("AUTOPILOT_PUBLISH_ONLY_FANS_COMMENT", "true")
+    cfg2 = load_config(cfg_file)
+    assert cfg2.open_comment is False
+    assert cfg2.only_fans_comment is True

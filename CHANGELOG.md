@@ -4,6 +4,11 @@
 版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
 ## [Unreleased]
+### Fixed
+- 草稿留言默认关闭的问题：`need_open_comment` 此前硬编码为 0，现默认开启留言并开放配置
+  （`[publish].open_comment` / `only_fans_comment`，env 通道 `AUTOPILOT_PUBLISH_OPEN_COMMENT` /
+  `AUTOPILOT_PUBLISH_ONLY_FANS_COMMENT`）
+
 ### Added
 - **纯环境变量配置**：`AUTOPILOT_*` 覆盖全部配置项（优先级 env > config.toml > 默认），无 config.toml 也可运行（Docker env 注入部署）；最少只需 3 密钥 + 2 定位字段，纯 env 模式缺项报错指明对应变量名
 - **crontab 表达式定时**：内置 5 字段 cron 解析器（零依赖，支持 `*`/`*/n`/`a-b`/列表，vixie 日周并集语义），`AUTOPILOT_CRON` / `[schedule].cron` / `--cron` 注入，`--daily HH:MM` 保留简写

@@ -39,8 +39,8 @@ def run_publish(
         "digest": digest,
         "content": html,
         "thumb_media_id": cover_media_id or "",
-        "need_open_comment": 0,
-        "only_fans_can_comment": 0,
+        "need_open_comment": 1 if cfg.open_comment else 0,
+        "only_fans_can_comment": 1 if cfg.only_fans_comment else 0,
     }
     media_id = wechat.add_draft([article])
     result = {
