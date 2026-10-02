@@ -1,7 +1,8 @@
 """⑥ 配图：按 provider 取图 → Pillow 加工 → 上传微信素材。
 
-provider 可选（config `images.provider`，默认 local）：
-- local：本地渐变封面 + 标题字，零外部依赖（国内服务器免翻墙直达的保底默认）
+provider 可选（config `images.provider`，默认 gen）：
+- gen：AI 生成封面——LLM 当美术指导（选图案/配色），本地 Pillow 渲染（见 artgen.py）
+- local：本地渐变封面 + 标题字，零外部依赖（连 LLM 设计环节也不需要）
 - openverse：免 key（CC0/公有领域图），海外服务，国内网络通常需代理
 - pixabay：免费 key（pixabay.com/api/docs 仍在发放），海外服务
 - pexels：官方已暂停发放新 key，仅已有 key 的用户可用
@@ -22,29 +23,19 @@ import time
 from pathlib import Path
 
 import httpx
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from ..config import Config
 from ..llm import LLM
 from ..wechat.client import WechatClient
+from . import artgen
+from .artgen import _fit_line, _load_font
 from .renderer import render_shell
 
 COVER_SIZE = (900, 383)
-
 PEXELS_SEARCH = "https://api.pexels.com/v1/search"
 PIXABAY_SEARCH = "https://pixabay.com/api/"
 OPENVERSE_SEARCH = "https://api.openverse.org/v1/images/"
-
-# 中文字体候选：macOS / Linux 服务器 / Docker / Windows 各放几个，
-# 一个都找不到时跳过封面加字，只保留裁剪后的图
-FONT_CANDIDATES = [
-    "/System/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-    "C:/Windows/Fonts/msyh.ttc",
-]
 
 
 def run_images(cfg: Config, wechat: WechatClient, llm: LLM,
@@ -53,7 +44,11 @@ def run_images(cfg: Config, wechat: WechatClient, llm: LLM,
     cover_src_url = None
 
     # 封面：draft/add 要求 thumb_media_id，因此取图失败时用本地渐变封面兜底
-    if cfg.image_provider == "local":
+    if cfg.image_provider == "gen":
+        processed, design = artgen.design_and_generate(llm, cfg, title)
+        meta["cover_source"] = "ai_generated"
+        meta["cover_design"] = design
+    elif cfg.image_provider == "local":
         processed = _local_cover(title)
         meta["cover_source"] = "local"
     else:
@@ -73,8 +68,8 @@ def run_images(cfg: Config, wechat: WechatClient, llm: LLM,
             meta["cover_source"] = "local_fallback"
     meta["cover_media_id"] = wechat.add_material(processed, "thumb")
 
-    # 正文图：锦上添花，任何失败只记录不阻塞
-    if cfg.image_provider != "local":
+    # 正文图：锦上添花，任何失败只记录不阻塞（gen/local 不配正文图）
+    if cfg.image_provider not in {"local", "gen"}:
         try:
             keywords = meta.get("cover_query") or _en_keywords(llm, title)
             body_path, _ = _fetch_photo(cfg, keywords, exclude_url=cover_src_url)
@@ -246,26 +241,6 @@ def _cover_crop(img: Image.Image) -> Image.Image:
         new_h = int(w / target_ratio)
         box = (0, max((h - new_h) // 3, 0), w, max((h - new_h) // 3, 0) + new_h)
     return img.crop(box).resize(COVER_SIZE, Image.LANCZOS)
-
-
-def _load_font(size: int):
-    for candidate in FONT_CANDIDATES:
-        path = Path(candidate)
-        if path.is_file():
-            try:
-                return ImageFont.truetype(str(path), size)
-            except OSError:
-                continue
-    return None
-
-
-def _fit_line(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> str:
-    """标题太长时截断加省略号，保证单行放得下。"""
-    if draw.textlength(text, font=font) <= max_width:
-        return text
-    while text and draw.textlength(text + "…", font=font) > max_width:
-        text = text[:-1]
-    return text + "…"
 
 
 def _splice_image(blocks: list[str], url: str) -> list[str]:

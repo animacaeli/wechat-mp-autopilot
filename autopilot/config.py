@@ -19,7 +19,7 @@ ACCOUNT_TYPES = {"personal", "enterprise"}
 PUBLISH_MODES = {"draft", "auto"}
 STYLE_PRESETS = {"wenyi", "ganhuo", "youmo"}
 LLM_STAGES = {"topics", "writer", "humanizer", "titlist", "digest"}
-IMAGE_PROVIDERS = {"openverse", "pixabay", "pexels", "local"}
+IMAGE_PROVIDERS = {"gen", "local", "openverse", "pixabay", "pexels"}
 
 
 class ConfigError(Exception):
@@ -162,7 +162,7 @@ def load_config(path: Path | None = None) -> Config:
     if style_preset not in STYLE_PRESETS:
         raise ConfigError(f"[style].preset 只能是 {' / '.join(sorted(STYLE_PRESETS))}，当前为 \"{style_preset}\"。")
 
-    image_provider = str(data.get("images", {}).get("provider", "local"))
+    image_provider = str(data.get("images", {}).get("provider", "gen"))
     if image_provider not in IMAGE_PROVIDERS:
         raise ConfigError(
             f"[images].provider 只能是 {' / '.join(sorted(IMAGE_PROVIDERS))}，当前为 \"{image_provider}\"。"

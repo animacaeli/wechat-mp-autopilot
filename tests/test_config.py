@@ -12,7 +12,7 @@ def test_example_config_loads():
     assert cfg.publish_mode == "draft"
     assert cfg.style_preset in {"wenyi", "ganhuo", "youmo"}
     # 默认图库必须免 key（Pexels 已停发新 key，新用户拿不到）
-    assert cfg.image_provider in {"openverse", "local"}
+    assert cfg.image_provider in {"gen", "local"}
 
 
 def _rewrite_example(tmp_path, replacements: dict):

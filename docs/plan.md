@@ -61,7 +61,7 @@
 | LLM 调用 | `openai` SDK + **可配置 base_url** | 任意 OpenAI 兼容端点（DeepSeek / GLM / OpenAI / 本地 vLLM）即插即用，模型与参数全部来自 config |
 | 公众号 API | 自封薄 client（`httpx`，约 10 个接口） | 接口面小，自封比引 wechatpy 更可控、依赖更少 |
 | 排版 | Jinja2 模板 + markdown→HTML 转换 | 模板版本化，多套风格可切换 |
-| 图片处理 | Pillow + 多 provider 图库（默认 local 本地生成） | Pexels 2025 起停发新 key，海外图库国内不可达；默认零依赖，详见 6.6 |
+| 图片处理 | Pillow + 多 provider（默认 gen：LLM 美术指导 + 程序化渲染） | Pexels 2025 起停发新 key，海外图库国内不可达；详见 6.6 |
 | 数据存储 | SQLite | 数据回流记录，零运维 |
 | 调度 | 系统 cron / systemd timer | 应用本身无内嵌调度（YAGNI），一行 crontab 搞定定时 |
 | 部署 | Docker（内置 uv）或裸机 uv | 固定服务器两种方式都文档化 |
@@ -269,15 +269,16 @@ uv run autopilot stats --run runs/xxx                # personal 模式人工补�
 
 | provider | 说明 |
 |---|---|
-| `local`（默认） | 本地渐变底 + 标题字封面，零外部依赖，国内服务器开箱即用 |
+| `gen`（默认） | **AI 生成封面**：LLM 当美术指导（`cover.designer.md` prompt 从 6 种图案库选型、按主题定 3 色配色），本地 Pillow 程序化渲染——文本模型不能直接吐图，但选型与配色正是它擅长的；零图库依赖、国内可达、无版权；同标题种子固定重跑不换脸 |
+| `local` | 本地固定渐变底 + 标题字，连 LLM 设计环节也省了（最省最稳的兜底） |
 | `openverse` | 免 key 开放图库（检索限定 CC0/PDM，可商用免署名），需网络可达或代理 |
 | `pixabay` | 免费 key（仍在发放），图片质量更佳，需网络可达或代理 |
 | `pexels` | 仅已有 key 的老用户可用（官方停发新 key） |
 
-- **封面**：取图（或本地生成）→ Pillow 裁成 900×383（2.35:1）+ 叠加标题字 → 上传永久素材拿 `thumb_media_id`
-- **正文点缀**：1 张，关键词取图 → `media/uploadimg` 换微信 URL → 插入 HTML 约 40% 处
-- **降级链**：远程取图失败（无结果/超时/不可达）→ 自动降级本地渐变封面；封面素材是 `draft/add` 必需品，thumb_media_id 永不为空
-- M3 接生图模型（CogView / 通义万相，国内 API 可达、天然无版权）作为「真实风格化配图」的升级路线
+- **封面**：gen 设计渲染（或取图）→ 叠加标题字 → 上传永久素材拿 `thumb_media_id`
+- **正文点缀**：仅远程图库 provider 配 1 张（关键词取图 → `media/uploadimg` 换微信 URL → 插入 HTML 约 40% 处）；gen/local 不配正文图
+- **降级链**：LLM 设计失败 → 内置默认设计；远程取图失败 → 本地渐变封面；封面素材是 `draft/add` 必需品，thumb_media_id 永不为空
+- M3 接生图模型（CogView / 通义万相）做像素级风格化插画（国内可达、无版权），与 gen 的「美术指导」路线并存
 
 ### 6.7 草稿与发布模块（wechat 薄 client）
 

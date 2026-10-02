@@ -84,7 +84,7 @@ Docker 方式见 `docker-compose.yml`。
 | `[niche]` | 账号定位（领域/读者/人设/方向池）——选题质量的上限由它决定 |
 | `[style].preset` | 写作风格：`wenyi` 文艺 / `ganhuo` 干货 / `youmo` 幽默 |
 | `[style].template` | 排版模板：`clean` / `wenyi` |
-| `[images].provider` | 配图来源：`local`（默认，本地渐变封面，零外部依赖）/ `openverse`（免 key，CC0 图库）/ `pixabay`（免费 key）/ `pexels`（已停发新 key，仅老用户） |
+| `[images].provider` | 配图来源：`gen`（默认，AI 美术指导 + 本地程序化渲染，零图库依赖）/ `local`（固定渐变封面）/ `openverse`（免 key 图库）/ `pixabay`（免费 key）/ `pexels`（已停发新 key，仅老用户） |
 
 敏感值（AppSecret、各家 API key）只存环境变量名，实际值放 `.env`（已 gitignore）。
 

@@ -60,12 +60,14 @@ template = "clean"
 # ── 配图 ────────────────────────────────────────────────
 [images]
 # provider 选一个：
-#   local     = 本地渐变封面 + 标题字，零外部依赖——默认（国内服务器免翻墙直达）
-#   openverse = 免 key 开放图库（CC0/公有领域，可商用免署名；需网络可达 api.openverse.org）
-#   pixabay   = 免费 key（pixabay.com/api/docs 注册即得，图片质量更佳；需网络可达）
+#   gen       = AI 生成封面（默认）：大模型当美术指导选图案配色，本地 Pillow
+#               渲染——零图库依赖、无版权、国内网络直达（多用一次 LLM 调用）
+#   local     = 本地固定渐变封面，连 LLM 设计环节也省了（最省、最稳）
+#   openverse = 免 key 开放图库（CC0/公有领域；海外服务，国内通常需代理）
+#   pixabay   = 免费 key（pixabay.com/api/docs；海外服务，国内通常需代理）
 #   pexels    = 官方已暂停发放新 API key（2025 起），仅已有 key 的用户可用
-# 海外图库在国内服务器通常需要代理；取图失败都会自动降级为本地渐变封面
-provider            = "local"
+# 远程取图失败都会自动降级为本地渐变封面（封面素材是草稿的必需品）
+provider            = "gen"
 pexels_api_key_env  = "PEXELS_API_KEY"   # 仅 provider = "pexels" 时需要
 pixabay_api_key_env = "PIXABAY_API_KEY"  # 仅 provider = "pixabay" 时需要
 fallback_plain      = true               # 取图失败降级为本地封面，不阻塞流程

@@ -143,7 +143,7 @@ def _check_env(cfg: Config) -> int:
         else:
             print(f"  {BAD} {label}: {name} 未设置（.env 里补 {name}）")
             failed += 1
-    if cfg.image_provider in {"openverse", "local"}:
+    if cfg.image_provider in {"gen", "openverse", "local"}:
         print(f"  {OK} 图库 provider={cfg.image_provider} 免 key")
     return failed
 

@@ -57,6 +57,8 @@ class FakeLLM:
                 {"title": "查询从8秒到0.2秒，我只改了一行代码", "type": "数字", "hook": "反差", "score": 9},
                 {"title": "索引建了四个全没用上，问题出在这", "type": "痛点", "hook": "痛点", "score": 8},
             ]}
+        if self.stage == "":  # images 环节：gen 封面的美术指导调用
+            return {"pattern": "waves", "palette": ["#24344d", "#4d6a8f", "#aebfd6"], "mood": "沉稳科技"}
         raise AssertionError(f"unexpected stage {self.stage}")
 
 
@@ -196,6 +198,21 @@ def test_cover_fallback_when_gallery_dead(sandbox, monkeypatch):
     assert meta["fallback_used"] is True
     assert meta["cover_source"] == "local_fallback"
     assert meta["cover_media_id"] == "THUMB_MEDIA_1"  # 兜底封面也走素材上传
+    draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
+    assert draft["has_cover"] is True
+
+
+def test_provider_gen_ai_cover(sandbox):
+    """默认 gen provider：LLM 设计稿 → 程序化渲染 → 照常上传素材。"""
+    cfg = _make_cfg(sandbox, mode="draft", provider="gen")
+    run_dir = _run(sandbox, cfg)
+
+    import json
+    meta = json.loads((run_dir / "06_meta.json").read_text(encoding="utf-8"))
+    assert meta["cover_source"] == "ai_generated"
+    assert meta["cover_design"]["pattern"] == "waves"
+    assert meta["cover_media_id"] == "THUMB_MEDIA_1"
+    assert meta["body_images"] == []
     draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
     assert draft["has_cover"] is True
 
