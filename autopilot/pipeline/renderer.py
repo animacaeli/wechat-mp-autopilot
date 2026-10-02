@@ -165,3 +165,32 @@ def render_shell(blocks: list[str], template_name: str, footer: str = "") -> str
     theme = THEMES.get(template_name, THEMES["clean"])
     tpl = _env.get_template(f"{template_name}.html.j2")
     return tpl.render(content="\n".join(blocks), footer=footer, theme=theme)
+
+
+def ensure_headings(markdown_text: str, llm) -> tuple[str, bool]:
+    """保底分节：全文没有二级标题时，让 LLM 只插入小标题行。
+
+    返回 (处理后的文本, 是否插入)。插入失败或结果可疑时原样返回。
+    """
+    import re
+
+    from .common import strip_fence
+
+    if re.search(r"^##\s", markdown_text, re.MULTILINE):
+        return markdown_text, False
+    system = (
+        "你是排版编辑。给文章插入 3~5 个二级标题（## 开头，单独一行）。\n"
+        "要求：标题用 6~12 字的意象式短语，克制、有画面感，不要像目录式概括"
+        "（例如「凌晨一点的厨房」而非「关于沟通问题」）。\n"
+        "只允许插入 ## 标题行，一个字都不许改动、删除、增加原有正文。直接输出加好标题的全文。"
+    )
+    try:
+        out = strip_fence(llm.chat(system, markdown_text))
+    except Exception:
+        return markdown_text, False
+    # 防篡改检查：原文去掉空白后应几乎完整保留在结果里
+    original = re.sub(r"\s+", "", markdown_text)
+    result = re.sub(r"\s+", "", re.sub(r"^##\s.*$", "", out, flags=re.MULTILINE))
+    if len(result) < len(original) * 0.97:
+        return markdown_text, False
+    return out, True

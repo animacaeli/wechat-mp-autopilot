@@ -24,6 +24,7 @@ from ..llm import LLM
 from .common import load_stage_instructions
 
 COVER_SIZE = (900, 383)
+DIVIDER_SIZE = (900, 200)
 PATTERN_NAMES = ["waves", "dots", "contour", "mosaic", "beams", "circuit"]
 DEFAULT_PALETTE = ["#24344d", "#4d6a8f", "#aebfd6"]
 
@@ -203,6 +204,30 @@ def generate_cover(title: str, design: dict) -> tuple[Path, dict]:
     out = Path(tempfile.gettempdir()) / f"autopilot-gen-cover-{int(time.time() * 1000)}.jpg"
     img.save(out, "JPEG", quality=88)
     return out, applied
+
+
+def generate_divider(design: dict, index: int = 0) -> Path:
+    """按封面同款图案与配色渲染正文装饰条（无文字），插在小节标题后做视觉锚点。
+
+    index 参与种子，同一篇文章的多张装饰条同风格而有变化。
+    """
+    pattern = design.get("pattern")
+    if pattern not in PATTERN_NAMES:
+        pattern = "waves"
+    palette = _validate_palette(design.get("palette")) or DEFAULT_PALETTE
+    rng = random.Random(_stable_seed(f"{pattern}|divider|{index}"))
+    w, h = DIVIDER_SIZE
+    bg = _hex_to_rgb(palette[0])
+    accents = [_hex_to_rgb(c) for c in palette[1:]]
+
+    img = Image.new("RGB", DIVIDER_SIZE, bg)
+    overlay = Image.new("RGBA", DIVIDER_SIZE, (0, 0, 0, 0))
+    _PATTERNS[pattern](ImageDraw.Draw(overlay), bg, accents, rng, w, h)
+    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+
+    out = Path(tempfile.gettempdir()) / f"autopilot-divider-{int(time.time() * 1000)}-{index}.jpg"
+    img.save(out, "JPEG", quality=86)
+    return out
 
 
 def design_and_generate(llm: LLM, cfg: Config, title: str) -> tuple[Path, dict]:

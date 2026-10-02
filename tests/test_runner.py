@@ -235,7 +235,7 @@ def test_cover_fallback_when_gallery_dead(sandbox, monkeypatch):
 
 
 def test_provider_gen_ai_cover(sandbox):
-    """默认 gen provider：LLM 设计稿 → 程序化渲染 → 照常上传素材。"""
+    """默认 gen provider：LLM 设计稿 → 程序化渲染 → 照常上传素材 + 小节装饰条。"""
     cfg = _make_cfg(sandbox, mode="draft", provider="gen")
     run_dir = _run(sandbox, cfg)
 
@@ -245,9 +245,33 @@ def test_provider_gen_ai_cover(sandbox):
     assert meta["cover_source"] == "ai_generated"
     assert meta["cover_design"]["pattern"] == "waves"
     assert meta["cover_media_id"] == "THUMB_MEDIA_1"
-    assert meta["body_images"] == []
+    # FakeWriter 的 MARKDOWN 有 2 个 ## 小节 → 2 张装饰条
+    assert len(meta["body_images"]) == 2
+    html = (run_dir / "05_article.html").read_text(encoding="utf-8")
+    assert html.count("mmbiz.qpic.cn") == 2
     draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
     assert draft["has_cover"] is True
+
+
+def test_ensure_headings_inserted_when_missing(sandbox):
+    """写作产物无 ## 标题时，ensure_headings 补意象式小节；已有 ## 时不动。"""
+    from autopilot.pipeline import renderer
+
+    class HeadingLLM:
+        usage_tokens = 0
+
+        def chat(self, system, user):
+            return "## 深夜的路灯\n" + user
+
+    text = "一段没有任何标题的正文。" * 10
+    out, inserted = renderer.ensure_headings(text, HeadingLLM())
+    assert inserted is True
+    assert out.startswith("## 深夜的路灯")
+    assert "一段没有任何标题的正文。" in out  # 原文保留
+
+    out2, inserted2 = renderer.ensure_headings("## 已有\n正文", HeadingLLM())
+    assert inserted2 is False
+    assert out2 == "## 已有\n正文"
 
 
 def test_provider_local_never_touches_network(sandbox, monkeypatch):

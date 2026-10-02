@@ -1,7 +1,8 @@
 """⑥ 配图：按 provider 取图 → Pillow 加工 → 上传微信素材。
 
 provider 可选（config `images.provider`，默认 gen）：
-- gen：AI 生成封面——LLM 当美术指导（选图案/配色），本地 Pillow 渲染（见 artgen.py）
+- gen：AI 生成——LLM 当美术指导（选图案/配色），本地 Pillow 渲染封面 900×383，
+  并为每个小节生成同风格装饰条 900×200 作视觉锚点（见 artgen.py）
 - local：本地渐变封面 + 标题字，零外部依赖（连 LLM 设计环节也不需要）
 - openverse：免 key（CC0/公有领域图），海外服务，国内网络通常需代理
 - pixabay：免费 key（pixabay.com/api/docs 仍在发放），海外服务
@@ -67,8 +68,15 @@ def run_images(cfg: Config, wechat: WechatClient, llm: LLM, blocks: list[str], t
             meta["cover_source"] = "local_fallback"
     meta["cover_media_id"] = wechat.add_material(processed, "thumb")
 
-    # 正文图：锦上添花，任何失败只记录不阻塞（gen/local 不配正文图）
-    if cfg.image_provider not in {"local", "gen"}:
+    # 正文图：锦上添花，任何失败只记录不阻塞。
+    # gen：每个小节标题后插一张与封面同风格的装饰条；远程图库：约 40% 处插 1 张实拍图
+    if cfg.image_provider == "gen":
+        try:
+            blocks, urls = _splice_dividers(wechat, blocks, meta.get("cover_design") or {})
+            meta["body_images"] = urls
+        except Exception as err:
+            meta["body_image_skipped"] = str(err)[:200]
+    elif cfg.image_provider != "local":
         try:
             keywords = meta.get("cover_query") or _en_keywords(llm, title)
             body_path, _ = _fetch_photo(cfg, keywords, exclude_url=cover_src_url)
@@ -81,6 +89,24 @@ def run_images(cfg: Config, wechat: WechatClient, llm: LLM, blocks: list[str], t
 
     footer = "AI 辅助创作" if cfg.ai_disclosure else ""
     return render_shell(blocks, cfg.style_template, footer=footer), meta
+
+
+def _splice_dividers(wechat: WechatClient, blocks: list[str], cover_design: dict) -> tuple[list[str], list[str]]:
+    """在每个二级标题块后插入一张封面同款风格的装饰条（最多 3 张，单张失败跳过）。"""
+    out: list[str] = []
+    urls: list[str] = []
+    for block in blocks:
+        out.append(block)
+        if not block.startswith("<h2") or len(urls) >= 3:
+            continue
+        try:
+            divider = artgen.generate_divider(cover_design, index=len(urls))
+            url = wechat.upload_content_image(divider)
+            out.append(f'<img src="{url}" style="width:100%;border-radius:6px;margin:4px auto 16px;display:block;"/>')
+            urls.append(url)
+        except Exception:
+            continue
+    return out, urls
 
 
 def _en_keywords(llm: LLM, title: str) -> str:

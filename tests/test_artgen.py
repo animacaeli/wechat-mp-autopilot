@@ -71,3 +71,13 @@ def test_design_and_generate_bad_payload_uses_default(cfg):
     llm = StubLLM({"pattern": "hacker", "palette": ["red"]})  # 不合法设计稿
     _, design = design_and_generate(llm, cfg, "标题")
     assert design["pattern"] in PATTERN_NAMES
+
+
+@pytest.mark.parametrize("pattern", PATTERN_NAMES)
+def test_divider_renders_valid_jpeg(pattern):
+    from autopilot.pipeline.artgen import generate_divider
+
+    path = generate_divider({"pattern": pattern, "palette": DEFAULT_PALETTE}, index=1)
+    img = Image.open(path)
+    assert img.size == (900, 200)
+    assert img.format == "JPEG"

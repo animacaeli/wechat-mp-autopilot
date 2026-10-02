@@ -127,11 +127,26 @@ def execute(cfg: Config, opts: RunOptions) -> Path:
     title = titles["picked"]["title"]
 
     # ── ⑤ 排版渲染 ───────────────────────────────────────
+    headings_inserted = False
     if from_index <= 4:
         from ..pipeline import renderer as renderer_mod
 
+        # 保底分节：写作产物没有任何二级标题时，插入意象式小标题（不改动正文）
+        render_llm = LLM(cfg, "writer")
+        humanized, headings_inserted = renderer_mod.ensure_headings(humanized, render_llm)
+        state.track("render", render_llm)
+        if headings_inserted:
+            state.artifact("humanize").write_text(humanized, encoding="utf-8")
+            print("[5/7] 正文无小标题，已自动插入意象式分节")
         blocks = renderer_mod.render_blocks(humanized, cfg.style_template)
-        save_json(state.artifact("render"), {"template": cfg.style_template, "blocks": blocks})
+        save_json(
+            state.artifact("render"),
+            {
+                "template": cfg.style_template,
+                "blocks": blocks,
+                "headings_inserted": headings_inserted,
+            },
+        )
         print(f"[5/7] 排版：{len(blocks)} 个内容块（{cfg.style_template} 模板）")
     else:
         blocks = load_json(state.artifact("render"))["blocks"]
