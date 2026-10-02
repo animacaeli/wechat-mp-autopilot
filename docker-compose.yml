@@ -2,7 +2,7 @@
 # 定时写作用 crontab 表达式（AUTOPILOT_CRON），容器常驻自动产出
 services:
   autopilot:
-    image: ghcr.io/<owner>/wechat-mp-autopilot:latest
+    image: ghcr.io/animacaeli/wechat-mp-autopilot:latest
     # build: .                     # 本地有源码想自建时解开
     restart: unless-stopped
     environment:

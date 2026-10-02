@@ -24,10 +24,9 @@ dependencies = [
     "mistune>=3.0,<4",
     "pillow>=10.0,<12",
 ]
-# 推送到 GitHub 后把 <owner> 替换为实际仓库地址
 [project.urls]
-Homepage = "https://github.com/<owner>/wechat-mp-autopilot"
-Issues = "https://github.com/<owner>/wechat-mp-autopilot/issues"
+Homepage = "https://github.com/animacaeli/wechat-mp-autopilot"
+Issues = "https://github.com/animacaeli/wechat-mp-autopilot/issues"
 
 [project.scripts]
 autopilot = "autopilot.cli:main"

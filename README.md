@@ -1,6 +1,6 @@
 # wechat-mp-autopilot
 
-[![CI](https://github.com/<owner>/wechat-mp-autopilot/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/wechat-mp-autopilot/actions/workflows/ci.yml)
+[![CI](https://github.com/animacaeli/wechat-mp-autopilot/actions/workflows/ci.yml/badge.svg)](https://github.com/animacaeli/wechat-mp-autopilot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
@@ -84,7 +84,7 @@ uv run autopilot stats --run runs/xxx --day 3          # 人工补录第 3 天�
 ```yaml
 services:
   autopilot:
-    image: ghcr.io/<owner>/wechat-mp-autopilot:latest
+    image: ghcr.io/animacaeli/wechat-mp-autopilot:latest
     restart: unless-stopped
     environment:
       # 密钥（必需）

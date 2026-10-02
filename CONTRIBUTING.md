@@ -6,7 +6,7 @@
 ## 快速上手（开发环境）
 
 ```bash
-git clone https://github.com/<owner>/wechat-mp-autopilot.git
+git clone https://github.com/animacaeli/wechat-mp-autopilot.git
 cd wechat-mp-autopilot
 uv sync            # 安装依赖（含 dev 工具；国内网络走内置清华镜像）
 make precommit     # 安装 git hooks：提交前 lint，推送前测试
