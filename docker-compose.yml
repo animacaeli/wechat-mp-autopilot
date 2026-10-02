@@ -1,12 +1,18 @@
 services:
   autopilot:
+    # 优先拉取已发布镜像；仓库内构建则自动 fallback 到 build
+    # （发布流程：git tag v0.1.0 → GitHub Actions 构建多架构镜像推到 ghcr.io）
+    image: ghcr.io/<owner>/wechat-mp-autopilot:latest
     build: .
+    restart: unless-stopped
     env_file: .env
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./runs:/app/runs
       - ./data:/app/data
       - ./logs:/app/logs
-      # 换成自己的 prompt/范文时挂载覆盖层：
+      # 换成自己的 skill/范文时挂载覆盖层：
       # - ./prompts/user:/app/prompts/user:ro
-    command: ["uv", "run", "autopilot", "run"]
+      # - ./skills:/app/skills:ro
+    # 常驻定时写作：每日 08:00 自动产出（方向从 config 的 niche.directions 按日轮换）
+    command: ["uv", "run", "autopilot", "schedule", "--daily", "08:00"]

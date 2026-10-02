@@ -16,7 +16,7 @@ def test_all_subcommands_registered():
     parser = build_parser()
     actions = {a for a in parser._subparsers._group_actions}
     choices = set().union(*(a.choices.keys() for a in actions))
-    assert choices == {"init", "verify", "run", "status", "unpublish", "stats", "skills"}
+    assert choices == {"init", "verify", "run", "status", "unpublish", "stats", "skills", "schedule"}
 
 
 def test_unknown_command_exits():

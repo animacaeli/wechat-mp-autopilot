@@ -6,6 +6,11 @@
 ## [Unreleased]
 
 ### Added
+- `autopilot schedule` 常驻定时写作：每日 HH:MM 自动产出，方向池按日轮换，单日失败不退出（容器部署免宿主 cron）
+- tag 发布流水线（docker.yml）：`v*` tag → ghcr.io 多架构镜像（amd64/arm64）+ GitHub Release，镜像 tag 规则 `v0.1.0 → :0.1.0/:0.1/:latest`
+- docker-compose 支持 `docker compose pull` 直接拉取已发布镜像
+
+### Added
 - 自动分节保底：写作产物无小标题时由 LLM 插入意象式标题行（ensure_headings，带防篡改校验）
 - gen 配图新增小节装饰条：复用封面图案与配色渲染 900×200，插在每个二级标题后（最多 3 张）
 - skill 供给体系：各阶段能力支持 drop-in SKILL.md（含捆绑资源自动拼接），内置 prompts 降级为兜底，prompts/user/ 为补充说明层

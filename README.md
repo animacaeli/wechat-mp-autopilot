@@ -77,23 +77,44 @@ uv run autopilot unpublish --run runs/xxx              # 回滚误发（freepubl
 uv run autopilot stats --run runs/xxx --day 3          # 人工补录第 3 天阅读数据
 ```
 
-### 定时（固定服务器）
+### 定时写作（两种方式）
+
+**方式一：容器常驻调度（推荐，一条命令搞定）**——项目内置 `schedule` 命令，每日定点自动产出，单日失败不影响后续，无需宿主 cron：
+
+```bash
+cp config.example.toml config.toml && $EDITOR config.toml   # 填密钥、定位，[niche].directions 填方向池
+docker compose up -d          # 每日 08:00 自动写一篇（compose 里可改时间）
+docker compose logs -f        # 看执行日志
+```
+
+选题方向从 `niche.directions` 方向池**按日轮换**（今天"两性沟通"、明天"婚姻经营"），也可裸机运行：`uv run autopilot schedule --daily 08:00`。
+
+**方式二：宿主 cron（裸机部署）**：
 
 ```bash
 # crontab -e ：每天 08:00 跑一篇
-0 8 * * * cd /opt/wechat-mp-autopilot && uv run autopilot run >> logs/cron.log 2>&1
+0 8 * * * cd /opt/wechat-mp-autopilot && uv run autopilot run --direction "你的方向" >> logs/cron.log 2>&1
 ```
 
-Docker 方式：
+### 镜像发布与一键部署
+
+仓库配置了 tag 发布流水线（`.github/workflows/docker.yml`）：
 
 ```bash
-cp config.example.toml config.toml && $EDITOR config.toml   # 填密钥与定位（或用 .env + env_file）
-docker compose build
-# run 子命令需要选题方向：要么 config 里 niche.directions 非空，要么追加参数传方向
-docker compose run autopilot -- --direction "你的选题方向"
+git tag v0.1.0 && git push origin v0.1.0
+# → 自动构建 linux/amd64 + linux/arm64 镜像推到 ghcr.io，并创建 GitHub Release
 ```
 
-镜像内置 CJK 字体（封面标题叠加依赖），`runs/`、`data/`、`logs/` 已挂载持久化。
+别人在服务器上一分钟部署（不需要 clone 仓库）：
+
+```bash
+mkdir autopilot && cd autopilot
+curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/<owner>/wechat-mp-autopilot/main/docker-compose.yml
+cp /path/to/config.toml . && cp /path/to/.env .      # 或手写：参照仓库 config.example.toml
+docker compose up -d
+```
+
+镜像 tag 规则：`v0.1.0` → `:0.1.0`、`:0.1`、`:latest`。ghcr.io 国内拉取慢时可配置 Docker 镜像加速，或 fork 后把 workflow 的 registry 换成阿里云 ACR 等国内源。
 
 ## 配置一览（config.toml）
 

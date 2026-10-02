@@ -73,7 +73,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("skills", help="查看各阶段能力来源（skill / 内置兜底 / 补充说明）")
 
+    p_sched = sub.add_parser("schedule", help="常驻定时写作：每日定点自动产出（容器部署用，免宿主 cron）")
+    p_sched.add_argument(
+        "--daily", default="08:00", type=_arg_daily, metavar="HH:MM", help="每日触发时间（默认 08:00）"
+    )
+    p_sched.add_argument("--direction", default="", help="方向池为空时的固定选题方向（方向池非空时按日轮换，忽略此项）")
+    p_sched.add_argument(
+        "--publish", choices=["draft", "auto"], default=None, help="临时覆盖发布模式（联锁校验同样生效）"
+    )
+
     return parser
+
+
+def _arg_daily(value: str) -> tuple[int, int]:
+    from .scheduler import parse_daily
+
+    try:
+        return parse_daily(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from err
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -87,6 +105,7 @@ def main(argv: list[str] | None = None) -> None:
             "unpublish": cmd_unpublish,
             "stats": cmd_stats,
             "skills": cmd_skills,
+            "schedule": cmd_schedule,
         }[args.command](args)
     except ConfigError as err:
         print(f"{BAD} [配置错误] {err}", file=sys.stderr)
@@ -375,6 +394,52 @@ def cmd_skills(args) -> None:
         "\n放入方式：把 skill 目录（含 SKILL.md）拷贝为 skills/<阶段名>/，"
         "写作阶段可用 skills/writer.<风格>/ 精确匹配或 skills/writer/ 通用。详见 skills/README.md。"
     )
+
+
+# ── schedule ────────────────────────────────────────────
+def cmd_schedule(args) -> None:
+    """常驻定时写作：每日 HH:MM 触发全流程，单日失败不退出进程。"""
+    import datetime as dt
+    import time
+
+    from .pipeline.runner import RunOptions, execute
+    from .scheduler import pick_direction, seconds_until_next
+
+    load_dotenv()
+    cfg = load_config()
+    if args.publish:
+        cfg = cfg.with_publish_mode(args.publish)
+    if not cfg.directions and not args.direction:
+        raise SystemExit(
+            "定时写作需要选题方向：在 config.toml 的 [niche].directions 填方向池"
+            "（推荐，按日轮换），或给 schedule 传 --direction 固定方向。"
+        )
+    hour, minute = args.daily
+    pool_desc = f"方向池 {len(cfg.directions)} 个按日轮换" if cfg.directions else f"固定方向「{args.direction}」"
+    print(f"[schedule] 定时写作已启动：每日 {hour:02d}:{minute:02d}（{pool_desc}），Ctrl+C 退出")
+
+    while True:
+        now = dt.datetime.now()
+        wait = seconds_until_next(now, hour, minute)
+        print(f"[schedule] 下次执行 {(now + dt.timedelta(seconds=wait)):%Y-%m-%d %H:%M}（{int(wait // 60)} 分钟后）")
+        try:
+            time.sleep(wait)
+        except KeyboardInterrupt:
+            print("\n[schedule] 已停止")
+            return
+
+        day = dt.date.today()
+        direction = pick_direction(cfg.directions, day) or args.direction
+        print(f"[schedule] {day} 开始执行，选题方向：{direction}")
+        try:
+            execute(cfg, RunOptions(direction=direction))
+        except SystemExit as err:  # execute 的入参校验失败等，记录后继续等下一天
+            print(f"{BAD} [schedule] 本次执行失败（exit={err.code}），明天继续。", file=sys.stderr)
+        except KeyboardInterrupt:
+            print("\n[schedule] 已停止")
+            return
+        except Exception as err:  # 单日失败（网络/模型/微信）不杀死常驻进程
+            print(f"{BAD} [schedule] 本次执行失败：{err}；明天继续。", file=sys.stderr)
 
 
 if __name__ == "__main__":
