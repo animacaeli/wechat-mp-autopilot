@@ -1,18 +1,33 @@
+# 纯环境变量注入部署：配置全部走 AUTOPILOT_* / 密钥变量，无需挂载 config.toml
+# 定时写作用 crontab 表达式（AUTOPILOT_CRON），容器常驻自动产出
 services:
   autopilot:
-    # 优先拉取已发布镜像；仓库内构建则自动 fallback 到 build
-    # （发布流程：git tag v0.1.0 → GitHub Actions 构建多架构镜像推到 ghcr.io）
     image: ghcr.io/<owner>/wechat-mp-autopilot:latest
-    build: .
+    # build: .                     # 本地有源码想自建时解开
     restart: unless-stopped
-    env_file: .env
+    environment:
+      # ── 密钥（必需）──
+      WECHAT_APP_ID: wx0000000000000000
+      WECHAT_APP_SECRET: your-app-secret
+      LLM_API_KEY: sk-xxxxxxxx
+      # ── 账号与发布（可选，默认 personal/draft）──
+      AUTOPILOT_ACCOUNT_TYPE: personal     # personal | enterprise
+      AUTOPILOT_PUBLISH_MODE: draft        # draft | auto（仅 enterprise 可 auto）
+      # ── 账号定位（必需：选题质量的上限）──
+      AUTOPILOT_NICHE_FIELD: "情感成长：两性关系、婚姻经营、亲子养育"
+      AUTOPILOT_NICHE_AUDIENCE: "正在经历亲密关系与养育课题的普通读者"
+      AUTOPILOT_NICHE_PERSONA: "温和而清醒的同行者"
+      AUTOPILOT_NICHE_DIRECTIONS: "两性沟通,婚姻经营,亲子养育"   # 方向池，按日轮换
+      # ── 风格与配图（可选）──
+      AUTOPILOT_STYLE_PRESET: wenyi        # wenyi | ganhuo | youmo
+      AUTOPILOT_STYLE_TEMPLATE: clean      # clean | wenyi
+      AUTOPILOT_IMAGES_PROVIDER: gen       # gen | local | openverse | pixabay | pexels
+      # ── 定时写作（crontab 表达式：分 时 日 月 周）──
+      AUTOPILOT_CRON: "0 8 * * *"          # 每天 08:00；隔天一篇用 "0 8 */2 * *"
     volumes:
-      - ./config.toml:/app/config.toml:ro
-      - ./runs:/app/runs
-      - ./data:/app/data
+      - ./runs:/app/runs                   # 每篇文章的产物落盘
       - ./logs:/app/logs
-      # 换成自己的 skill/范文时挂载覆盖层：
-      # - ./prompts/user:/app/prompts/user:ro
-      # - ./skills:/app/skills:ro
-    # 常驻定时写作：每日 08:00 自动产出（方向从 config 的 niche.directions 按日轮换）
-    command: ["uv", "run", "autopilot", "schedule", "--daily", "08:00"]
+      # 想用自己的 skill / 补充说明时再挂载（可选）：
+      # - ./skills:/app/skills
+      # - ./prompts/user:/app/prompts/user
+    # command: ["uv", "run", "autopilot", "verify"]   # 首次部署先自检一次

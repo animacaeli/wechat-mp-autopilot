@@ -64,6 +64,11 @@ preset   = "ganhuo"
 # 排版模板：templates/ 目录下的模板名（clean / wenyi）
 template = "clean"
 
+# ── 定时写作（autopilot schedule 常驻模式）─────────────────
+[schedule]
+# crontab 表达式（分 时 日 月 周）；Docker env 注入用 AUTOPILOT_CRON 覆盖
+cron = "0 8 * * *"
+
 # ── 配图 ────────────────────────────────────────────────
 [images]
 # provider 选一个：

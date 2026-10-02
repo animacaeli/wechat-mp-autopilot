@@ -77,41 +77,55 @@ uv run autopilot unpublish --run runs/xxx              # 回滚误发（freepubl
 uv run autopilot stats --run runs/xxx --day 3          # 人工补录第 3 天阅读数据
 ```
 
-### 定时写作（两种方式）
+### Docker 部署：自己写 compose，配置全走环境变量
 
-**方式一：容器常驻调度（推荐，一条命令搞定）**——项目内置 `schedule` 命令，每日定点自动产出，单日失败不影响后续，无需宿主 cron：
+镜像内置全部代码与 CJK 字体，**无需挂载 config.toml**——密钥和配置全部通过环境变量注入，定时写作用 crontab 表达式。自己写一份 `docker-compose.yml`：
 
-```bash
-cp config.example.toml config.toml && $EDITOR config.toml   # 填密钥、定位，[niche].directions 填方向池
-docker compose up -d          # 每日 08:00 自动写一篇（compose 里可改时间）
-docker compose logs -f        # 看执行日志
+```yaml
+services:
+  autopilot:
+    image: ghcr.io/<owner>/wechat-mp-autopilot:latest
+    restart: unless-stopped
+    environment:
+      # 密钥（必需）
+      WECHAT_APP_ID: wx…
+      WECHAT_APP_SECRET: …
+      LLM_API_KEY: sk-…
+      # 定位（必需）：方向池逗号分隔，按日轮换
+      AUTOPILOT_NICHE_FIELD: "情感成长：两性关系、婚姻经营、亲子养育"
+      AUTOPILOT_NICHE_AUDIENCE: "正在经历亲密关系与养育课题的普通读者"
+      AUTOPILOT_NICHE_DIRECTIONS: "两性沟通,婚姻经营,亲子养育"
+      # 可选配置（其余见 config.example.toml 的 env 对照）
+      AUTOPILOT_ACCOUNT_TYPE: personal       # enterprise 可开全自动发布
+      AUTOPILOT_PUBLISH_MODE: draft
+      AUTOPILOT_STYLE_PRESET: wenyi          # wenyi | ganhuo | youmo
+      AUTOPILOT_IMAGES_PROVIDER: gen
+      # 定时写作：crontab 表达式（分 时 日 月 周）
+      AUTOPILOT_CRON: "0 8 * * *"            # 每天 08:00；"0 8 */2 * *" 隔天一篇
+    volumes:
+      - ./runs:/app/runs                     # 每篇文章的产物落盘
+
+docker compose up -d && docker compose logs -f
 ```
 
-选题方向从 `niche.directions` 方向池**按日轮换**（今天"两性沟通"、明天"婚姻经营"），也可裸机运行：`uv run autopilot schedule --daily 08:00`。
+完整变量对照见仓库 `docker-compose.yml`（带注释的模板）。首次部署建议先跑一次自检：`docker compose run autopilot verify`。想用自己的 skill/范文时挂载 `./skills:/app/skills`、`./prompts/user:/app/prompts/user`。
 
-**方式二：宿主 cron（裸机部署）**：
+**环境变量优先级**：`AUTOPILOT_*` > config.toml > 内置默认。纯 env 模式下最少只需 3 个密钥 + 2 个定位字段，其余全有合理默认。
 
-```bash
-# crontab -e ：每天 08:00 跑一篇
-0 8 * * * cd /opt/wechat-mp-autopilot && uv run autopilot run --direction "你的方向" >> logs/cron.log 2>&1
-```
+### 定时写作的其他方式
 
-### 镜像发布与一键部署
+- 裸机常驻：`uv run autopilot schedule --cron "0 8 * * *"`（或 `--daily 08:00` 简写；配置注入用 config 的 `[schedule].cron`）
+- 宿主 cron 一次性触发：`0 8 * * * cd /opt/wechat-mp-autopilot && uv run autopilot run --direction "你的方向" >> logs/cron.log 2>&1`
+
+调度器语义：选题方向从方向池**按日轮换**；单次失败只记录、不杀死常驻进程；`*/n`、`a-b`、逗号列表等 cron 常用语法均支持。
+
+### 镜像发布
 
 仓库配置了 tag 发布流水线（`.github/workflows/docker.yml`）：
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
 # → 自动构建 linux/amd64 + linux/arm64 镜像推到 ghcr.io，并创建 GitHub Release
-```
-
-别人在服务器上一分钟部署（不需要 clone 仓库）：
-
-```bash
-mkdir autopilot && cd autopilot
-curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/<owner>/wechat-mp-autopilot/main/docker-compose.yml
-cp /path/to/config.toml . && cp /path/to/.env .      # 或手写：参照仓库 config.example.toml
-docker compose up -d
 ```
 
 镜像 tag 规则：`v0.1.0` → `:0.1.0`、`:0.1`、`:latest`。ghcr.io 国内拉取慢时可配置 Docker 镜像加速，或 fork 后把 workflow 的 registry 换成阿里云 ACR 等国内源。

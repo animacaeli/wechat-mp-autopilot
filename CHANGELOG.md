@@ -4,6 +4,11 @@
 版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
 ## [Unreleased]
+### Added
+- **纯环境变量配置**：`AUTOPILOT_*` 覆盖全部配置项（优先级 env > config.toml > 默认），无 config.toml 也可运行（Docker env 注入部署）；最少只需 3 密钥 + 2 定位字段，纯 env 模式缺项报错指明对应变量名
+- **crontab 表达式定时**：内置 5 字段 cron 解析器（零依赖，支持 `*`/`*/n`/`a-b`/列表，vixie 日周并集语义），`AUTOPILOT_CRON` / `[schedule].cron` / `--cron` 注入，`--daily HH:MM` 保留简写
+- Dockerfile 默认命令改为 `autopilot schedule`（常驻定时）；docker-compose 重写为纯 env 注入模板（带全量注释）
+
 
 ### Added
 - `autopilot schedule` 常驻定时写作：每日 HH:MM 自动产出，方向池按日轮换，单日失败不退出（容器部署免宿主 cron）

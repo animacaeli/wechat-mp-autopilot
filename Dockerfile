@@ -14,4 +14,6 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY . .
 RUN uv sync --frozen --no-dev
 
-CMD ["uv", "run", "autopilot", "--help"]
+# 默认常驻定时写作：cron 表达式来自 AUTOPILOT_CRON（默认每天 08:00）
+# 一次性运行改命令为：... autopilot run --direction "..."
+CMD ["uv", "run", "autopilot", "schedule"]

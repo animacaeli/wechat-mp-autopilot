@@ -150,3 +150,60 @@ def test_load_dotenv(tmp_path, monkeypatch):
 
     assert os.environ["FOO_ENV_TEST"] == "hello"
     assert os.environ["BAR_ENV_TEST"] == "quoted"
+
+
+# ── AUTOPILOT_* 环境变量注入（Docker 部署通道）─────────────
+
+_ALL_AUTOPILOT = [name for name in __import__("autopilot.config", fromlist=["ENV_OVERRIDES"]).ENV_OVERRIDES]
+
+
+@pytest.fixture
+def no_autopilot_env(monkeypatch):
+    for name in _ALL_AUTOPILOT:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_env_overrides_file_config(tmp_path, no_autopilot_env, monkeypatch):
+    """AUTOPILOT_* 优先于 config.toml 的值。"""
+    cfg_file = _rewrite_example(tmp_path, {})
+    monkeypatch.setenv("AUTOPILOT_ACCOUNT_TYPE", "enterprise")
+    monkeypatch.setenv("AUTOPILOT_IMAGES_PROVIDER", "local")
+    monkeypatch.setenv("AUTOPILOT_NICHE_DIRECTIONS", "A,B, C")
+    monkeypatch.setenv("AUTOPILOT_CRON", "30 7 * * *")
+    cfg = load_config(cfg_file)
+    assert cfg.account_type == "enterprise"
+    assert cfg.image_provider == "local"
+    assert cfg.directions == ["A", "B", "C"]
+    assert cfg.schedule_cron == "30 7 * * *"
+
+
+def test_env_only_mode_without_config_file(tmp_path, no_autopilot_env, monkeypatch, tmp_path_factory):
+    """无 config.toml 时，AUTOPILOT_* 环境变量即可完成全部配置（Docker env 注入）。"""
+    for name in ("WECHAT_APP_ID", "WECHAT_APP_SECRET", "LLM_API_KEY"):
+        monkeypatch.setenv(name, f"{name}-value")
+    monkeypatch.setenv("AUTOPILOT_NICHE_FIELD", "情感成长")
+    monkeypatch.setenv("AUTOPILOT_NICHE_AUDIENCE", "普通读者")
+    monkeypatch.setenv("AUTOPILOT_STYLE_PRESET", "wenyi")
+    monkeypatch.setenv("AUTOPILOT_ACCOUNT_TYPE", "personal")
+
+    cfg = load_config(tmp_path / "不存在的config.toml")
+    assert cfg.account_type == "personal"
+    assert cfg.niche_field == "情感成长"
+    assert cfg.style_preset == "wenyi"
+    assert cfg.image_provider == "gen"  # 默认值
+    assert cfg.schedule_cron == "0 8 * * *"
+    assert cfg.app_id == "WECHAT_APP_ID-value"  # 密钥走默认 *_env 变量名
+
+
+def test_env_only_missing_required_gives_env_hint(tmp_path, no_autopilot_env, monkeypatch):
+    """纯 env 模式缺必填项时，报错指明对应的环境变量名。"""
+    monkeypatch.setenv("AUTOPILOT_NICHE_FIELD", "只有领域没有读者")
+    with pytest.raises(ConfigError, match="AUTOPILOT_NICHE_AUDIENCE"):
+        load_config(tmp_path / "不存在的config.toml")
+
+
+def test_env_bad_int_rejected(tmp_path, no_autopilot_env, monkeypatch):
+    monkeypatch.setenv("AUTOPILOT_PUBLISH_MAX_PER_DAY", "abc")
+    cfg_file = _rewrite_example(tmp_path, {})
+    with pytest.raises(ConfigError, match="AUTOPILOT_PUBLISH_MAX_PER_DAY"):
+        load_config(cfg_file)

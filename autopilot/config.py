@@ -85,6 +85,7 @@ class Config:
     pixabay_api_key_env: str
     fallback_plain: bool
     app_id_direct: str = ""
+    schedule_cron: str = "0 8 * * *"
     app_secret_direct: str = ""
     pexels_api_key_direct: str = ""
     pixabay_api_key_direct: str = ""
@@ -149,7 +150,9 @@ def _resolve_secret(direct: str, env_name: str, label: str) -> str:
 def _require(data: dict, section: str, key: str):
     value = data.get(section, {}).get(key)
     if value is None or (isinstance(value, str) and not value.strip()):
-        raise ConfigError(f"config.toml 缺少必填项 [{section}].{key}，请参照 config.example.toml 补齐。")
+        hint = _ENV_BY_TOML.get((section, key))
+        env_hint = f"（纯环境变量模式：设置 {hint}）" if data.get("_env_only") and hint else ""
+        raise ConfigError(f"配置缺少必填项 [{section}].{key}，请参照 config.example.toml 补齐{env_hint}。")
     return value
 
 
@@ -173,13 +176,95 @@ def validate_publish_interlock(cfg: Config) -> None:
         )
 
 
+# AUTOPILOT_* 环境变量 → config.toml 路径与类型（Docker env 注入的唯一通道）
+ENV_OVERRIDES: dict[str, tuple[str, str, str]] = {
+    "AUTOPILOT_ACCOUNT_TYPE": ("account", "type", "str"),
+    "AUTOPILOT_PUBLISH_MODE": ("publish", "mode", "str"),
+    "AUTOPILOT_PUBLISH_MAX_PER_DAY": ("publish", "max_per_day", "int"),
+    "AUTOPILOT_PUBLISH_AI_DISCLOSURE": ("publish", "ai_disclosure", "bool"),
+    "AUTOPILOT_POLL_INTERVAL_SEC": ("publish", "poll_interval_sec", "int"),
+    "AUTOPILOT_POLL_TIMEOUT_MIN": ("publish", "poll_timeout_min", "int"),
+    "AUTOPILOT_LLM_BASE_URL": ("llm", "base_url", "str"),
+    "AUTOPILOT_LLM_API_KEY": ("llm", "api_key", "str"),
+    "AUTOPILOT_LLM_MODEL": ("llm", "model", "str"),
+    "AUTOPILOT_LLM_TEMPERATURE": ("llm", "temperature", "float"),
+    "AUTOPILOT_LLM_MAX_TOKENS": ("llm", "max_tokens", "int"),
+    "AUTOPILOT_LLM_TIMEOUT_SEC": ("llm", "timeout_sec", "int"),
+    "AUTOPILOT_WECHAT_APP_ID": ("wechat", "app_id", "str"),
+    "AUTOPILOT_WECHAT_APP_SECRET": ("wechat", "app_secret", "str"),
+    "AUTOPILOT_NICHE_FIELD": ("niche", "field", "str"),
+    "AUTOPILOT_NICHE_AUDIENCE": ("niche", "audience", "str"),
+    "AUTOPILOT_NICHE_PERSONA": ("niche", "persona", "str"),
+    "AUTOPILOT_NICHE_DIRECTIONS": ("niche", "directions", "list"),
+    "AUTOPILOT_STYLE_PRESET": ("style", "preset", "str"),
+    "AUTOPILOT_STYLE_TEMPLATE": ("style", "template", "str"),
+    "AUTOPILOT_IMAGES_PROVIDER": ("images", "provider", "str"),
+    "AUTOPILOT_IMAGES_FALLBACK_PLAIN": ("images", "fallback_plain", "bool"),
+    "AUTOPILOT_PEXELS_API_KEY": ("images", "pexels_api_key", "str"),
+    "AUTOPILOT_PIXABAY_API_KEY": ("images", "pixabay_api_key", "str"),
+    "AUTOPILOT_CRON": ("schedule", "cron", "str"),
+}
+_ENV_BY_TOML = {(s, k): env for env, (s, k, _t) in ENV_OVERRIDES.items()}
+
+
+def _coerce_env(raw: str, typ: str, env_name: str):
+    try:
+        if typ == "str":
+            return raw
+        if typ == "int":
+            return int(raw)
+        if typ == "float":
+            return float(raw)
+        if typ == "bool":
+            return raw.lower() in {"1", "true", "yes", "on"}
+        if typ == "list":
+            return [x.strip() for x in raw.split(",") if x.strip()]
+    except ValueError as err:
+        raise ConfigError(f"环境变量 {env_name}={raw!r} 无法解析为 {typ}：{err}") from err
+    raise ConfigError(f"未知类型 {typ}（{env_name}）")
+
+
+def _apply_env_overrides(data: dict) -> None:
+    """AUTOPILOT_* 环境变量覆盖配置（优先级最高），支持纯 env 无 config.toml 部署。"""
+    for env_name, (section, key, typ) in ENV_OVERRIDES.items():
+        raw = os.environ.get(env_name)
+        if raw is None or not raw.strip():
+            continue
+        data.setdefault(section, {})[key] = _coerce_env(raw.strip(), typ, env_name)
+
+
+# 纯 env 模式（无 config.toml）的默认值：密钥环境变量名 + 各段合理缺省，
+# 让 Docker 用户最少只需设 3 个密钥 + 2 个定位字段
+_ENV_ONLY_DEFAULTS = {
+    "account": {"type": "personal"},
+    "publish": {"mode": "draft"},
+    "style": {"preset": "ganhuo", "template": "clean"},
+    "llm": {
+        "api_key_env": "LLM_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+    },
+    "wechat": {"app_id_env": "WECHAT_APP_ID", "app_secret_env": "WECHAT_APP_SECRET"},
+    "images": {"pexels_api_key_env": "PEXELS_API_KEY", "pixabay_api_key_env": "PIXABAY_API_KEY"},
+    "schedule": {"cron": "0 8 * * *"},
+}
+
+
 def load_config(path: Path | None = None) -> Config:
     cfg_path = path or PROJECT_ROOT / "config.toml"
-    if not cfg_path.is_file():
+    if cfg_path.is_file():
+        data = loads(cfg_path.read_text(encoding="utf-8"))
+    elif any(os.environ.get(name, "").strip() for name in ENV_OVERRIDES):
+        # 纯环境变量模式：Docker env 注入部署，无需挂载 config.toml
+        data = {"_env_only": True}
+        for section, defaults in _ENV_ONLY_DEFAULTS.items():
+            data.setdefault(section, {}).update(defaults)
+    else:
         raise ConfigError(
-            f"找不到 {cfg_path}。请先复制模板：cp config.example.toml config.toml，或运行 `autopilot init`。"
+            f"找不到 {cfg_path}。请先复制模板：cp config.example.toml config.toml、运行 `autopilot init`，"
+            "或用 AUTOPILOT_* 环境变量做纯 env 配置（Docker 部署，见 README）。"
         )
-    data = loads(cfg_path.read_text(encoding="utf-8"))
+    _apply_env_overrides(data)
 
     account_type = _require(data, "account", "type")
     if account_type not in ACCOUNT_TYPES:
@@ -266,6 +351,7 @@ def load_config(path: Path | None = None) -> Config:
         app_secret_direct=str(data.get("wechat", {}).get("app_secret", "") or ""),
         pexels_api_key_direct=str(data.get("images", {}).get("pexels_api_key", "") or ""),
         pixabay_api_key_direct=str(data.get("images", {}).get("pixabay_api_key", "") or ""),
+        schedule_cron=str(data.get("schedule", {}).get("cron", "0 8 * * *")),
     )
     validate_publish_interlock(cfg)
     return cfg

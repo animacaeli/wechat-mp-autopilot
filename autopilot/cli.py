@@ -73,9 +73,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("skills", help="查看各阶段能力来源（skill / 内置兜底 / 补充说明）")
 
-    p_sched = sub.add_parser("schedule", help="常驻定时写作：每日定点自动产出（容器部署用，免宿主 cron）")
+    p_sched = sub.add_parser("schedule", help="常驻定时写作：cron 定时自动产出（容器部署用，免宿主 cron）")
     p_sched.add_argument(
-        "--daily", default="08:00", type=_arg_daily, metavar="HH:MM", help="每日触发时间（默认 08:00）"
+        "--cron",
+        default=None,
+        metavar="EXPR",
+        help='crontab 表达式（分 时 日 月 周），如 "0 8 * * *"；默认取 schedule.cron / AUTOPILOT_CRON',
+    )
+    p_sched.add_argument(
+        "--daily",
+        default=None,
+        type=_arg_daily,
+        metavar="HH:MM",
+        help="每日触发的简写（等价 cron「M H * * *」；给了 --cron 时忽略）",
     )
     p_sched.add_argument("--direction", default="", help="方向池为空时的固定选题方向（方向池非空时按日轮换，忽略此项）")
     p_sched.add_argument(
@@ -398,12 +408,12 @@ def cmd_skills(args) -> None:
 
 # ── schedule ────────────────────────────────────────────
 def cmd_schedule(args) -> None:
-    """常驻定时写作：每日 HH:MM 触发全流程，单日失败不退出进程。"""
+    """常驻定时写作：按 cron 触发全流程，单次失败不退出进程。"""
     import datetime as dt
     import time
 
     from .pipeline.runner import RunOptions, execute
-    from .scheduler import pick_direction, seconds_until_next
+    from .scheduler import Cron, daily_to_cron, pick_direction
 
     load_dotenv()
     cfg = load_config()
@@ -411,16 +421,22 @@ def cmd_schedule(args) -> None:
         cfg = cfg.with_publish_mode(args.publish)
     if not cfg.directions and not args.direction:
         raise SystemExit(
-            "定时写作需要选题方向：在 config.toml 的 [niche].directions 填方向池"
-            "（推荐，按日轮换），或给 schedule 传 --direction 固定方向。"
+            "定时写作需要选题方向：设置 AUTOPILOT_NICHE_DIRECTIONS（逗号分隔方向池，"
+            "推荐，按日轮换），或给 schedule 传 --direction 固定方向。"
         )
-    hour, minute = args.daily
+
+    expr = args.cron or (daily_to_cron(*args.daily) if args.daily else cfg.schedule_cron)
+    try:
+        cron = Cron(expr)
+    except ValueError as err:
+        raise SystemExit(f"[schedule] cron 表达式无效：{err}") from err
+
     pool_desc = f"方向池 {len(cfg.directions)} 个按日轮换" if cfg.directions else f"固定方向「{args.direction}」"
-    print(f"[schedule] 定时写作已启动：每日 {hour:02d}:{minute:02d}（{pool_desc}），Ctrl+C 退出")
+    print(f"[schedule] 定时写作已启动：cron「{expr}」（{pool_desc}），Ctrl+C 退出")
 
     while True:
         now = dt.datetime.now()
-        wait = seconds_until_next(now, hour, minute)
+        wait = cron.seconds_until_next(now)
         print(f"[schedule] 下次执行 {(now + dt.timedelta(seconds=wait)):%Y-%m-%d %H:%M}（{int(wait // 60)} 分钟后）")
         try:
             time.sleep(wait)
@@ -433,13 +449,13 @@ def cmd_schedule(args) -> None:
         print(f"[schedule] {day} 开始执行，选题方向：{direction}")
         try:
             execute(cfg, RunOptions(direction=direction))
-        except SystemExit as err:  # execute 的入参校验失败等，记录后继续等下一天
-            print(f"{BAD} [schedule] 本次执行失败（exit={err.code}），明天继续。", file=sys.stderr)
+        except SystemExit as err:  # execute 的入参校验失败等，记录后继续等下一次
+            print(f"{BAD} [schedule] 本次执行失败（exit={err.code}），下次继续。", file=sys.stderr)
         except KeyboardInterrupt:
             print("\n[schedule] 已停止")
             return
-        except Exception as err:  # 单日失败（网络/模型/微信）不杀死常驻进程
-            print(f"{BAD} [schedule] 本次执行失败：{err}；明天继续。", file=sys.stderr)
+        except Exception as err:  # 单次失败（网络/模型/微信）不杀死常驻进程
+            print(f"{BAD} [schedule] 本次执行失败：{err}；下次继续。", file=sys.stderr)
 
 
 if __name__ == "__main__":
