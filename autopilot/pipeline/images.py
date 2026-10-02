@@ -269,7 +269,7 @@ def _cover_crop(img: Image.Image) -> Image.Image:
     else:
         new_h = int(w / target_ratio)
         box = (0, max((h - new_h) // 3, 0), w, max((h - new_h) // 3, 0) + new_h)
-    return img.crop(box).resize(COVER_SIZE, Image.LANCZOS)
+    return img.crop(box).resize(COVER_SIZE, Image.Resampling.LANCZOS)
 
 
 def _splice_image(blocks: list[str], url: str) -> list[str]:

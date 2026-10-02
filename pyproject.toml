@@ -22,7 +22,7 @@ dependencies = [
     "httpx>=0.27,<1",
     "jinja2>=3.1,<4",
     "mistune>=3.0,<4",
-    "pillow>=10.0,<12",
+    "pillow>=12.3,<13",   # 11.x 有已知 CVE（PYSEC-2026-xxxx），12.3 修复
 ]
 [project.urls]
 Homepage = "https://github.com/animacaeli/wechat-mp-autopilot"
