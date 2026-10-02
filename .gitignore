@@ -22,3 +22,5 @@ build/
 # 工具
 .DS_Store
 *.log
+.idea/
+.vscode/

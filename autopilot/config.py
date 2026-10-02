@@ -19,6 +19,7 @@ ACCOUNT_TYPES = {"personal", "enterprise"}
 PUBLISH_MODES = {"draft", "auto"}
 STYLE_PRESETS = {"wenyi", "ganhuo", "youmo"}
 LLM_STAGES = {"topics", "writer", "humanizer", "titlist", "digest"}
+IMAGE_PROVIDERS = {"openverse", "pixabay", "pexels", "local"}
 
 
 class ConfigError(Exception):
@@ -74,6 +75,7 @@ class Config:
     style_template: str
     image_provider: str
     pexels_api_key_env: str
+    pixabay_api_key_env: str
     fallback_plain: bool
 
     def secret(self, env_name: str) -> str:
@@ -124,6 +126,11 @@ def _require(data: dict, section: str, key: str):
     return value
 
 
+def _has(data: dict, section: str, key: str) -> bool:
+    value = data.get(section, {}).get(key)
+    return value is not None and (not isinstance(value, str) or bool(value.strip()))
+
+
 def validate_publish_interlock(cfg: Config) -> None:
     if cfg.publish_mode == "auto" and cfg.account_type != "enterprise":
         raise ConfigError(
@@ -154,6 +161,22 @@ def load_config(path: Path | None = None) -> Config:
     style_preset = _require(data, "style", "preset")
     if style_preset not in STYLE_PRESETS:
         raise ConfigError(f"[style].preset 只能是 {' / '.join(sorted(STYLE_PRESETS))}，当前为 \"{style_preset}\"。")
+
+    image_provider = str(data.get("images", {}).get("provider", "local"))
+    if image_provider not in IMAGE_PROVIDERS:
+        raise ConfigError(
+            f"[images].provider 只能是 {' / '.join(sorted(IMAGE_PROVIDERS))}，当前为 \"{image_provider}\"。"
+        )
+    if image_provider == "pexels" and not _has(data, "images", "pexels_api_key_env"):
+        raise ConfigError(
+            "[images].provider = \"pexels\" 需要配置 pexels_api_key_env"
+            "（注意：Pexels 官方已暂停发放新 API key，老 key 仍可用）。"
+        )
+    if image_provider == "pixabay" and not _has(data, "images", "pixabay_api_key_env"):
+        raise ConfigError(
+            "[images].provider = \"pixabay\" 需要配置 pixabay_api_key_env"
+            "（pixabay.com/api/docs 免费注册即得）。"
+        )
 
     style_template = _require(data, "style", "template")
     if not (PROJECT_ROOT / "templates" / f"{style_template}.html.j2").is_file():
@@ -195,8 +218,9 @@ def load_config(path: Path | None = None) -> Config:
         directions=list(data.get("niche", {}).get("directions", [])),
         style_preset=style_preset,
         style_template=style_template,
-        image_provider=str(data.get("images", {}).get("provider", "pexels")),
-        pexels_api_key_env=_require(data, "images", "pexels_api_key_env"),
+        image_provider=image_provider,
+        pexels_api_key_env=str(data.get("images", {}).get("pexels_api_key_env", "PEXELS_API_KEY")),
+        pixabay_api_key_env=str(data.get("images", {}).get("pixabay_api_key_env", "PIXABAY_API_KEY")),
         fallback_plain=bool(data.get("images", {}).get("fallback_plain", True)),
     )
     validate_publish_interlock(cfg)

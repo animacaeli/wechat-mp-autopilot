@@ -59,6 +59,13 @@ template = "clean"
 
 # ── 配图 ────────────────────────────────────────────────
 [images]
-provider           = "pexels"   # pexels（M3 预留：cogview）
-pexels_api_key_env = "PEXELS_API_KEY"
-fallback_plain     = true       # 取图失败降级为纯文字排版，不阻塞流程
+# provider 选一个：
+#   local     = 本地渐变封面 + 标题字，零外部依赖——默认（国内服务器免翻墙直达）
+#   openverse = 免 key 开放图库（CC0/公有领域，可商用免署名；需网络可达 api.openverse.org）
+#   pixabay   = 免费 key（pixabay.com/api/docs 注册即得，图片质量更佳；需网络可达）
+#   pexels    = 官方已暂停发放新 API key（2025 起），仅已有 key 的用户可用
+# 海外图库在国内服务器通常需要代理；取图失败都会自动降级为本地渐变封面
+provider            = "local"
+pexels_api_key_env  = "PEXELS_API_KEY"   # 仅 provider = "pexels" 时需要
+pixabay_api_key_env = "PIXABAY_API_KEY"  # 仅 provider = "pixabay" 时需要
+fallback_plain      = true               # 取图失败降级为本地封面，不阻塞流程

@@ -110,11 +110,13 @@ def sandbox(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _make_cfg(tmp_path, mode="auto"):
+def _make_cfg(tmp_path, mode="auto", provider=None):
     import re
 
     text = (PROJECT_ROOT / "config.example.toml").read_text(encoding="utf-8")
     text = text.replace('type = "personal"', 'type = "enterprise"').replace('mode = "draft"', f'mode = "{mode}"')
+    if provider:
+        text = re.sub(r"(?m)^(provider\s*=).*$", rf'\1 "{provider}"', text)
     cfg_file = tmp_path / "config.toml"
     cfg_file.write_text(text, encoding="utf-8")
     return load_config(cfg_file)
@@ -127,7 +129,7 @@ def _run(tmp_path, cfg, **kw):
 
 
 def test_full_run_auto_publish(sandbox, capsys):
-    cfg = _make_cfg(sandbox, mode="auto")
+    cfg = _make_cfg(sandbox, mode="auto", provider="openverse")
     run_dir = _run(sandbox, cfg)
     out = capsys.readouterr().out
 
@@ -181,12 +183,12 @@ def test_resume_from_topics_reuses_same_dir(sandbox):
     assert again == run_dir
 
 
-def test_cover_fallback_when_pexels_dead(sandbox, monkeypatch):
-    """图库全挂时本地生成纯色封面兜底，thumb_media_id 不允许为空。"""
+def test_cover_fallback_when_gallery_dead(sandbox, monkeypatch):
+    """远程图库全挂时本地生成渐变封面兜底，thumb_media_id 不允许为空。"""
     from autopilot.pipeline import images
 
     monkeypatch.setattr(images, "_fetch_photo", lambda cfg, kw, exclude_url=None: (None, None))
-    cfg = _make_cfg(sandbox, mode="draft")
+    cfg = _make_cfg(sandbox, mode="draft", provider="openverse")
     run_dir = _run(sandbox, cfg)
 
     import json
@@ -196,3 +198,39 @@ def test_cover_fallback_when_pexels_dead(sandbox, monkeypatch):
     assert meta["cover_media_id"] == "THUMB_MEDIA_1"  # 兜底封面也走素材上传
     draft = json.loads((run_dir / "07_draft_result.json").read_text(encoding="utf-8"))
     assert draft["has_cover"] is True
+
+
+def test_provider_local_never_touches_network(sandbox, monkeypatch):
+    """provider=local：全程不访问图库网络，封面由本地渐变生成。"""
+    from autopilot.pipeline import images
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("provider=local 不应访问图库")
+
+    monkeypatch.setattr(images, "_fetch_photo", _boom)
+    cfg = _make_cfg(sandbox, mode="draft", provider="local")
+    run_dir = _run(sandbox, cfg)
+
+    import json
+    meta = json.loads((run_dir / "06_meta.json").read_text(encoding="utf-8"))
+    assert meta["cover_source"] == "local"
+    assert meta["cover_media_id"] == "THUMB_MEDIA_1"
+    assert meta["body_images"] == []
+
+
+def test_fetch_photo_dispatch_by_provider(tmp_path, monkeypatch):
+    """不走 sandbox fixture（它会整体替换 _fetch_photo），单独验证真实分发逻辑。"""
+    from autopilot.pipeline import images
+
+    calls = []
+    monkeypatch.setattr(images, "_fetch_pexels",
+                        lambda cfg, kw, exclude_url=None: calls.append("pexels") or (None, None))
+    monkeypatch.setattr(images, "_fetch_pixabay",
+                        lambda cfg, kw, exclude_url=None: calls.append("pixabay") or (None, None))
+    monkeypatch.setattr(images, "_fetch_openverse",
+                        lambda kw, exclude_url=None: calls.append("openverse") or (None, None))
+
+    for provider in ("pexels", "pixabay", "openverse"):
+        cfg = _make_cfg(tmp_path, provider=provider)
+        assert images._fetch_photo(cfg, "kw") == (None, None)
+    assert calls == ["pexels", "pixabay", "openverse"]

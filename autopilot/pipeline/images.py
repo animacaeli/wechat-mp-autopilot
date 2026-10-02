@@ -1,8 +1,16 @@
-"""⑥ 配图：Pexels 取图 → Pillow 加工 → 上传微信素材。
+"""⑥ 配图：按 provider 取图 → Pillow 加工 → 上传微信素材。
 
-- 封面：按选题关键词取图 → 裁 900×383 → 叠加标题字 → 永久素材 thumb_media_id
+provider 可选（config `images.provider`，默认 local）：
+- local：本地渐变封面 + 标题字，零外部依赖（国内服务器免翻墙直达的保底默认）
+- openverse：免 key（CC0/公有领域图），海外服务，国内网络通常需代理
+- pixabay：免费 key（pixabay.com/api/docs 仍在发放），海外服务
+- pexels：官方已暂停发放新 key，仅已有 key 的用户可用
+
+所有远程取图失败都会降级到本地封面——draft/add 要求封面素材，
+thumb_media_id 不允许为空。
+
+- 封面：裁 900×383 → 叠加标题字 → 永久素材 thumb_media_id
 - 正文点缀：1 张 → media/uploadimg 换微信域名 URL → 插入 HTML 块列表
-- 全链路失败（无结果/超时/无 key）→ fallback_plain 降级为纯文字
 """
 
 from __future__ import annotations
@@ -22,7 +30,10 @@ from ..wechat.client import WechatClient
 from .renderer import render_shell
 
 COVER_SIZE = (900, 383)
+
 PEXELS_SEARCH = "https://api.pexels.com/v1/search"
+PIXABAY_SEARCH = "https://pixabay.com/api/"
+OPENVERSE_SEARCH = "https://api.openverse.org/v1/images/"
 
 # 中文字体候选：macOS / Linux 服务器 / Docker / Windows 各放几个，
 # 一个都找不到时跳过封面加字，只保留裁剪后的图
@@ -41,33 +52,38 @@ def run_images(cfg: Config, wechat: WechatClient, llm: LLM,
     meta: dict = {"cover_media_id": None, "body_images": [], "fallback_used": False}
     cover_src_url = None
 
-    # 封面：draft/add 要求 thumb_media_id，因此图库失败时用本地纯色标题封面兜底
-    try:
-        keywords = _en_keywords(llm, title)
-        cover_path, cover_src_url = _fetch_photo(cfg, keywords)
-        if cover_path is None:
-            raise RuntimeError(f"Pexels 按 “{keywords}” 无可用图片")
-        processed = _process_cover(cover_path, title)
-        meta["cover_query"] = keywords
-    except Exception as err:
-        if not cfg.fallback_plain:
-            raise
-        meta["fallback_used"] = True
-        meta["fallback_reason"] = str(err)[:200]
+    # 封面：draft/add 要求 thumb_media_id，因此取图失败时用本地渐变封面兜底
+    if cfg.image_provider == "local":
         processed = _local_cover(title)
-        meta["cover_source"] = "local_fallback"
+        meta["cover_source"] = "local"
+    else:
+        try:
+            keywords = _en_keywords(llm, title)
+            cover_path, cover_src_url = _fetch_photo(cfg, keywords)
+            if cover_path is None:
+                raise RuntimeError(f"{cfg.image_provider} 按 “{keywords}” 无可用图片")
+            processed = _process_cover(cover_path, title)
+            meta["cover_query"] = keywords
+        except Exception as err:
+            if not cfg.fallback_plain:
+                raise
+            meta["fallback_used"] = True
+            meta["fallback_reason"] = str(err)[:200]
+            processed = _local_cover(title)
+            meta["cover_source"] = "local_fallback"
     meta["cover_media_id"] = wechat.add_material(processed, "thumb")
 
     # 正文图：锦上添花，任何失败只记录不阻塞
-    try:
-        keywords = meta.get("cover_query") or _en_keywords(llm, title)
-        body_path, _ = _fetch_photo(cfg, keywords, exclude_url=cover_src_url)
-        if body_path is not None:
-            url = wechat.upload_content_image(body_path)
-            meta["body_images"] = [url]
-            blocks = _splice_image(blocks, url)
-    except Exception as err:
-        meta["body_image_skipped"] = str(err)[:200]
+    if cfg.image_provider != "local":
+        try:
+            keywords = meta.get("cover_query") or _en_keywords(llm, title)
+            body_path, _ = _fetch_photo(cfg, keywords, exclude_url=cover_src_url)
+            if body_path is not None:
+                url = wechat.upload_content_image(body_path)
+                meta["body_images"] = [url]
+                blocks = _splice_image(blocks, url)
+        except Exception as err:
+            meta["body_image_skipped"] = str(err)[:200]
 
     footer = "AI 辅助创作" if cfg.ai_disclosure else ""
     return render_shell(blocks, cfg.style_template, footer=footer), meta
@@ -87,12 +103,19 @@ def _en_keywords(llm: LLM, title: str) -> str:
 
 
 def _fetch_photo(cfg: Config, keywords: str, exclude_url: str | None = None) -> tuple[Path | None, str | None]:
-    """搜索并下载一张图，返回 (本地临时文件, 源图 URL)；无可用图返回 (None, None)。"""
-    key = cfg.secret(cfg.pexels_api_key_env)
+    """按 provider 分发；返回 (本地临时文件, 源图 URL)，无可用图返回 (None, None)。"""
+    if cfg.image_provider == "pixabay":
+        return _fetch_pixabay(cfg, keywords, exclude_url)
+    if cfg.image_provider == "openverse":
+        return _fetch_openverse(keywords, exclude_url)
+    return _fetch_pexels(cfg, keywords, exclude_url)
+
+
+def _fetch_pexels(cfg: Config, keywords: str, exclude_url: str | None = None) -> tuple[Path | None, str | None]:
     resp = httpx.get(
         PEXELS_SEARCH,
         params={"query": keywords, "per_page": 10, "orientation": "landscape"},
-        headers={"Authorization": key},
+        headers={"Authorization": cfg.secret(cfg.pexels_api_key_env)},
         timeout=20,
     )
     resp.raise_for_status()
@@ -102,11 +125,70 @@ def _fetch_photo(cfg: Config, keywords: str, exclude_url: str | None = None) -> 
         url = (photo.get("src") or {}).get("large2x") or (photo.get("src") or {}).get("large")
         if not url or url == exclude_url:
             continue
-        data = httpx.get(url, timeout=30, follow_redirects=True).content
-        with tempfile.NamedTemporaryFile(suffix=".jpeg", delete=False) as fh:
-            fh.write(data)
-            return Path(fh.name), url
+        path = _download_image(url)
+        if path is not None:
+            return path, url
     return None, None
+
+
+def _fetch_pixabay(cfg: Config, keywords: str, exclude_url: str | None = None) -> tuple[Path | None, str | None]:
+    resp = httpx.get(
+        PIXABAY_SEARCH,
+        params={"key": cfg.secret(cfg.pixabay_api_key_env), "q": keywords,
+                "image_type": "photo", "orientation": "horizontal",
+                "per_page": 10, "safesearch": "true"},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    hits = resp.json().get("hits", [])
+    random.shuffle(hits)
+    for hit in hits:
+        url = hit.get("largeImageURL") or hit.get("webformatURL")
+        if not url or url == exclude_url:
+            continue
+        path = _download_image(url)
+        if path is not None:
+            return path, url
+    return None, None
+
+
+def _fetch_openverse(keywords: str, exclude_url: str | None = None) -> tuple[Path | None, str | None]:
+    """免 key 图库。license 限定 CC0/PDM：可商用且无需署名。"""
+    resp = httpx.get(
+        OPENVERSE_SEARCH,
+        params={"q": keywords, "license": "cc0,pdm", "page_size": 20, "mature": "false"},
+        timeout=20,
+        follow_redirects=True,
+    )
+    resp.raise_for_status()
+    results = resp.json().get("results", [])
+    landscape = [r for r in results if (r.get("width") or 0) >= (r.get("height") or 0)] or results
+    random.shuffle(landscape)
+    for item in landscape:
+        url = item.get("url")
+        if not url or url == exclude_url:
+            continue
+        path = _download_image(url)
+        if path is not None:
+            return path, url
+    return None, None
+
+
+def _download_image(url: str) -> Path | None:
+    """下载并按魔数校验是 JPEG/PNG 才接受（openverse 结果偶有非图文件）。"""
+    try:
+        data = httpx.get(url, timeout=30, follow_redirects=True).content
+    except httpx.HTTPError:
+        return None
+    if data[:3] == b"\xff\xd8\xff":
+        suffix = ".jpg"
+    elif data[:8].startswith(b"\x89PNG"):
+        suffix = ".png"
+    else:
+        return None
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as fh:
+        fh.write(data)
+        return Path(fh.name)
 
 
 def _process_cover(src: Path, title: str) -> Path:
@@ -129,8 +211,8 @@ def _process_cover(src: Path, title: str) -> Path:
 
 
 def _local_cover(title: str) -> Path:
-    """图库失败时的兜底封面：纯色底 + 居中标题白字。"""
-    img = Image.new("RGB", COVER_SIZE, (90, 105, 120))
+    """本地生成封面：左右渐变底 + 居中标题白字，零外部依赖。"""
+    img = _gradient(COVER_SIZE, (52, 68, 88), (110, 128, 150))
     font = _load_font(54)
     if font is not None:
         draw = ImageDraw.Draw(img)
@@ -141,6 +223,16 @@ def _local_cover(title: str) -> Path:
     out = Path(tempfile.gettempdir()) / f"autopilot-cover-{int(time.time() * 1000)}.jpg"
     img.save(out, "JPEG", quality=88)
     return out
+
+
+def _gradient(size: tuple[int, int], c1: tuple[int, int, int], c2: tuple[int, int, int]) -> Image.Image:
+    img = Image.new("RGB", size)
+    draw = ImageDraw.Draw(img)
+    w, h = size
+    for x in range(w):
+        t = x / (w - 1)
+        draw.line([(x, 0), (x, h)], fill=tuple(int(a + (b - a) * t) for a, b in zip(c1, c2)))
+    return img
 
 
 def _cover_crop(img: Image.Image) -> Image.Image:

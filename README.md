@@ -84,6 +84,7 @@ Docker 方式见 `docker-compose.yml`。
 | `[niche]` | 账号定位（领域/读者/人设/方向池）——选题质量的上限由它决定 |
 | `[style].preset` | 写作风格：`wenyi` 文艺 / `ganhuo` 干货 / `youmo` 幽默 |
 | `[style].template` | 排版模板：`clean` / `wenyi` |
+| `[images].provider` | 配图来源：`local`（默认，本地渐变封面，零外部依赖）/ `openverse`（免 key，CC0 图库）/ `pixabay`（免费 key）/ `pexels`（已停发新 key，仅老用户） |
 
 敏感值（AppSecret、各家 API key）只存环境变量名，实际值放 `.env`（已 gitignore）。
 
@@ -108,7 +109,7 @@ Docker 方式见 `docker-compose.yml`。
 
 - **AI 内容标识**：《人工智能生成合成内容标识办法》（2025.9 施行）要求标识 AI 生成内容。人工发布时请在后台勾选「AI 生成」声明；`auto` 模式下 API 无法勾选该声明，本项目默认在摘要与文末自动加「AI 辅助创作」文字标识（`ai_disclosure`），请勿关闭后隐瞒 AI 属性
 - **内容责任**：自动发布没有人工闸门，发布内容的责任在你。建议保持 `max_per_day ≤ 1`，先以 `draft` 模式观察产出质量再开 `auto`
-- **图片版权**：仅使用 Pexels（无版权图库），不爬搜索引擎图片
+- **图片版权**：远程图库仅用可商用免署名的来源——openverse（限定 CC0/公有领域检索）或自有 key 的 pixabay / pexels；默认 `local` 本地生成无版权问题；不爬搜索引擎图片。注意海外图库在国内服务器通常需要代理，取图失败会自动降级为本地封面
 - **平台规则**：纯 AI 批量低质产出可能被平台判定营销号/限流，AI 味超标自动降级只是底线，不是免死金牌
 
 ## 开发

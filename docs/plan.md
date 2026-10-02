@@ -61,7 +61,7 @@
 | LLM 调用 | `openai` SDK + **可配置 base_url** | 任意 OpenAI 兼容端点（DeepSeek / GLM / OpenAI / 本地 vLLM）即插即用，模型与参数全部来自 config |
 | 公众号 API | 自封薄 client（`httpx`，约 10 个接口） | 接口面小，自封比引 wechatpy 更可控、依赖更少 |
 | 排版 | Jinja2 模板 + markdown→HTML 转换 | 模板版本化，多套风格可切换 |
-| 图片处理 | Pillow + Pexels API | 封面裁剪加字、无版权配图 |
+| 图片处理 | Pillow + 多 provider 图库（默认 local 本地生成） | Pexels 2025 起停发新 key，海外图库国内不可达；默认零依赖，详见 6.6 |
 | 数据存储 | SQLite | 数据回流记录，零运维 |
 | 调度 | 系统 cron / systemd timer | 应用本身无内嵌调度（YAGNI），一行 crontab 搞定定时 |
 | 部署 | Docker（内置 uv）或裸机 uv | 固定服务器两种方式都文档化 |
@@ -265,10 +265,19 @@ uv run autopilot stats --run runs/xxx                # personal 模式人工补�
 
 ### 6.6 配图模块
 
-- **封面**：Pexels API 按选题关键词取图 → Pillow 裁成 900×383（2.35:1）+ 叠加标题字 → 上传永久素材拿 `thumb_media_id`
-- **正文点缀**：1~2 张，Pexels 关键词取图 → `media/uploadimg` 换微信 URL → 插入 HTML 预留位
-- Pexels 免费无版权；M3 可选接生图模型（CogView / 通义万相）做风格化插画（config `images.provider` 已预留）
-- 图片搜索无结果 / API 超时 → 降级为纯文字排版，不阻塞流程
+**背景变化（2026-10）**：Pexels 官方已暂停发放新 API key，且实测海外图库（openverse/pixabay/pexels/unsplash）在国内网络均不可直达。因此配图改为多 provider 架构（config `images.provider`）：
+
+| provider | 说明 |
+|---|---|
+| `local`（默认） | 本地渐变底 + 标题字封面，零外部依赖，国内服务器开箱即用 |
+| `openverse` | 免 key 开放图库（检索限定 CC0/PDM，可商用免署名），需网络可达或代理 |
+| `pixabay` | 免费 key（仍在发放），图片质量更佳，需网络可达或代理 |
+| `pexels` | 仅已有 key 的老用户可用（官方停发新 key） |
+
+- **封面**：取图（或本地生成）→ Pillow 裁成 900×383（2.35:1）+ 叠加标题字 → 上传永久素材拿 `thumb_media_id`
+- **正文点缀**：1 张，关键词取图 → `media/uploadimg` 换微信 URL → 插入 HTML 约 40% 处
+- **降级链**：远程取图失败（无结果/超时/不可达）→ 自动降级本地渐变封面；封面素材是 `draft/add` 必需品，thumb_media_id 永不为空
+- M3 接生图模型（CogView / 通义万相，国内 API 可达、天然无版权）作为「真实风格化配图」的升级路线
 
 ### 6.7 草稿与发布模块（wechat 薄 client）
 
@@ -333,7 +342,7 @@ prompts/
 | AI 内容未标识 | personal：人工发布 SOP 第一条勾选「AI 生成」声明；enterprise/auto：`ai_disclosure` 自动加文字标识（API 无法勾选后台声明，见 2.3） |
 | 纯 AI 批量产出被判营销号 / 限流 | AI 味指数超标不自动发布；`max_per_day` 自我频控；宁可少发不发水文 |
 | auto 模式发布后发现内容有问题 | `freepublish/delete` 回滚；run 目录保留全量证据链 |
-| 图片版权 | 仅用 Pexels（无版权）或后续自生图，不爬搜索引擎图片 |
+| 图片版权 | 仅用可商用免署名来源（openverse 限定 CC0 / pixabay / pexels）或本地生成；不爬搜索引擎图片 |
 | 事实性错误 | 写作 prompt 强制「不确定的事实不写具体数字」；人工审核关注点写入 SOP；auto 模式用户自担审核责任（README 明示） |
 | token 成本 | 单篇全流程约 6~10 次调用、2~4 万 tokens，Flash 级定价下成本可忽略；run 记录中累计用量 |
 
@@ -381,7 +390,7 @@ M0 放在最前：**在作者自己的真实账号上实测草稿路径**。企�
 待确认（仅剩两项）：
 
 5. **LICENSE**：默认 MIT（无异议则建仓库时定下）
-6. **API key**（你自己的 dogfooding 用）：DeepSeek API key、Pexels API key（免费注册）、微信公众号 AppID/AppSecret + IP 白名单（本机调试时 IP 不在白名单会 40164，M0 实测在服务器上做，或临时把本机 IP 加进白名单）
+6. **API key**（你自己的 dogfooding 用）：DeepSeek API key、微信公众号 AppID/AppSecret + IP 白名单（注意本机调试时 IP 不在白名单会 40164，M0 实测在服务器上做，或临时把本机 IP 加进白名单）。图库默认 `local` 免 key；海外图库（openverse/pixabay/pexels）国内不可达需代理，已不作为默认依赖
 
 ## 11. 拟定目录结构（M1 落地形态）
 

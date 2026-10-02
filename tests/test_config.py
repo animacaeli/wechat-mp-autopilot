@@ -11,6 +11,39 @@ def test_example_config_loads():
     assert cfg.account_type == "personal"
     assert cfg.publish_mode == "draft"
     assert cfg.style_preset in {"wenyi", "ganhuo", "youmo"}
+    # 默认图库必须免 key（Pexels 已停发新 key，新用户拿不到）
+    assert cfg.image_provider in {"openverse", "local"}
+
+
+def _rewrite_example(tmp_path, replacements: dict):
+    import re
+
+    text = (PROJECT_ROOT / "config.example.toml").read_text(encoding="utf-8")
+    for pattern, repl in replacements.items():
+        text = re.sub(pattern, repl, text, flags=re.MULTILINE)
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(text, encoding="utf-8")
+    return cfg_file
+
+
+def test_unknown_image_provider_rejected(tmp_path):
+    cfg_file = _rewrite_example(tmp_path, {r"^(provider\s*=).*$": r'\1 "giphy"'})
+    with pytest.raises(ConfigError, match="provider"):
+        load_config(cfg_file)
+
+
+def test_pixabay_provider_without_key_rejected(tmp_path):
+    cfg_file = _rewrite_example(
+        tmp_path,
+        {r"^(provider\s*=).*$": r'\1 "pixabay"', r"^pixabay_api_key_env.*$": ""},
+    )
+    with pytest.raises(ConfigError, match="pixabay"):
+        load_config(cfg_file)
+
+
+def test_pixabay_provider_with_key_ok(tmp_path):
+    cfg_file = _rewrite_example(tmp_path, {r"^(provider\s*=).*$": r'\1 "pixabay"'})
+    assert load_config(cfg_file).image_provider == "pixabay"
 
 
 def test_interlock_personal_auto_rejected(tmp_path):

@@ -100,7 +100,8 @@ def cmd_init(args) -> None:
         print(f"{OK} 已生成 {env_path}")
     print(
         "\n接下来三步：\n"
-        "  1. 编辑 .env 填入 WECHAT_APP_ID / WECHAT_APP_SECRET / LLM_API_KEY / PEXELS_API_KEY\n"
+        "  1. 编辑 .env 填入 WECHAT_APP_ID / WECHAT_APP_SECRET / LLM_API_KEY\n"
+        "     （图库默认 openverse 免 key；想换 pixabay/pexels 再补对应 key）\n"
         "  2. 编辑 config.toml：账号类型 [account].type、定位 [niche]、风格 [style]\n"
         "     （企业认证号想全自动发布：type=\"enterprise\" + [publish].mode=\"auto\"）\n"
         "  3. 跑 `autopilot verify` 自检，全绿后 `autopilot run --direction \"…\"`\n"
@@ -129,14 +130,21 @@ def cmd_verify(args) -> None:
 
 def _check_env(cfg: Config) -> int:
     import os
+    checks = [("微信 AppID", cfg.app_id_env), ("微信 AppSecret", cfg.app_secret_env),
+              ("模型 API key", cfg.llm.api_key_env)]
+    if cfg.image_provider == "pexels":
+        checks.append(("Pexels key", cfg.pexels_api_key_env))
+    elif cfg.image_provider == "pixabay":
+        checks.append(("Pixabay key", cfg.pixabay_api_key_env))
     failed = 0
-    for label, name in [("微信 AppID", cfg.app_id_env), ("微信 AppSecret", cfg.app_secret_env),
-                        ("模型 API key", cfg.llm.api_key_env), ("Pexels key", cfg.pexels_api_key_env)]:
+    for label, name in checks:
         if os.environ.get(name, "").strip():
             print(f"  {OK} {label}: {name}")
         else:
             print(f"  {BAD} {label}: {name} 未设置（.env 里补 {name}）")
             failed += 1
+    if cfg.image_provider in {"openverse", "local"}:
+        print(f"  {OK} 图库 provider={cfg.image_provider} 免 key")
     return failed
 
 
