@@ -73,8 +73,9 @@ class FakeLLM:
                     {"title": "索引建了四个全没用上，问题出在这", "type": "痛点", "hook": "痛点", "score": 8},
                 ]
             }
-        if self.stage == "":  # images 环节：gen 封面的美术指导调用
-            return {"pattern": "waves", "palette": ["#24344d", "#4d6a8f", "#aebfd6"], "mood": "沉稳科技"}
+        if self.stage == "":  # images 环节：gen 封面的美术指导调用（3 候选格式）
+            wave = {"pattern": "waves", "palette": ["#24344d", "#4d6a8f", "#aebfd6"], "mood": "沉稳"}
+            return {"candidates": [wave, dict(wave), dict(wave)]}
         raise AssertionError(f"unexpected stage {self.stage}")
 
 
@@ -116,9 +117,9 @@ def sandbox(tmp_path, monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "sk-test")
     shutil.copytree(PROJECT_ROOT / "prompts", tmp_path / "prompts")
     shutil.copytree(PROJECT_ROOT / "templates", tmp_path / "templates")
-    from autopilot.pipeline import common, images, publisher, renderer, runner
+    from autopilot.pipeline import artgen, common, images, publisher, renderer, runner
 
-    for mod in (common, publisher, renderer, runner):
+    for mod in (common, publisher, renderer, runner, artgen):
         monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(runner, "LLM", FakeLLM)
     monkeypatch.setattr(runner, "WechatClient", FakeWechat)

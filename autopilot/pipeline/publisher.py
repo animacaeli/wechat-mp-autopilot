@@ -56,8 +56,7 @@ def run_publish(
 
     if cfg.publish_mode == "draft":
         result["next_step"] = (
-            "人工到公众号后台草稿箱确认发布（附A SOP）；"
-            "发布后建议手动群发一次触达关注者（发布≠群发，订阅号每天 1 次）"
+            "人工到公众号后台草稿箱确认发布（附A SOP）；发布后建议手动群发一次触达关注者（发布≠群发，订阅号每天 1 次）"
         )
         return result
 

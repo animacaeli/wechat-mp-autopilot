@@ -10,6 +10,7 @@ local 渐变兜底。同一标题种子固定，重跑不换脸。
 
 from __future__ import annotations
 
+import json
 import math
 import random
 import re
@@ -19,7 +20,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..config import Config
+from ..config import PROJECT_ROOT, Config
 from ..llm import LLM
 from .common import load_stage_instructions
 
@@ -230,24 +231,70 @@ def generate_divider(design: dict, index: int = 0) -> Path:
     return out
 
 
+def _recent_patterns(limit: int = 2) -> list[str]:
+    """最近几篇 run 实际使用的封面图案（新候选避开它们，防止连续撞款）。"""
+    runs_root = PROJECT_ROOT / "runs"
+    if not runs_root.is_dir():
+        return []
+    patterns: list[str] = []
+    for meta_path in sorted(runs_root.glob("*/06_meta.json"), reverse=True)[:limit]:
+        try:
+            pattern = json.loads(meta_path.read_text(encoding="utf-8")).get("cover_design", {}).get("pattern")
+        except (OSError, ValueError):
+            continue
+        if pattern in PATTERN_NAMES:
+            patterns.append(pattern)
+    return patterns
+
+
+def _default_design(recent: list[str]) -> dict:
+    """内置默认设计：同样避开最近用过的图案。"""
+    pattern = next((p for p in PATTERN_NAMES if p not in recent), "waves")
+    return {"pattern": pattern, "palette": DEFAULT_PALETTE, "mood": "内置默认设计（LLM 设计环节失败）"}
+
+
 def design_and_generate(llm: LLM, cfg: Config, title: str) -> tuple[Path, dict]:
-    """LLM 出设计稿 → 渲染。设计环节任何失败都用内置默认设计，绝不阻塞。"""
-    design = None
+    """LLM 出 3 个差异化候选 → 避开最近用过的图案 → 随机选用（同标题种子固定）。
+
+    设计环节任何失败都回退内置默认设计，绝不阻塞。装饰条沿用所选设计，
+    因此正文配图随封面一起跨篇变化。
+    """
+    recent = _recent_patterns()
+    candidates: list[dict] = []
     source_label = ""
     try:
         system, prov = load_stage_instructions("cover")
         source_label = prov["label"]
-        user = f"【文章标题】{title}\n【账号领域】{cfg.niche_field}\n【写作风格】{cfg.style_preset}\n\n请给出封面设计。"
+        avoid = f"\n【最近已用图案（候选须避开）】{'、'.join(dict.fromkeys(recent))}" if recent else ""
+        user = (
+            f"【文章标题】{title}\n【账号领域】{cfg.niche_field}\n"
+            f"【写作风格】{cfg.style_preset}{avoid}\n\n请给出 3 个封面设计候选。"
+        )
         raw = llm.chat_json(system, user)
-        if isinstance(raw, dict):
-            pattern = raw.get("pattern")
-            palette = _validate_palette(raw.get("palette"))
+        raw_list = raw.get("candidates") if isinstance(raw, dict) else None
+        if not raw_list and isinstance(raw, dict) and raw.get("pattern"):
+            raw_list = [raw]  # 兼容旧版单对象格式
+        for item in raw_list or []:
+            if not isinstance(item, dict):
+                continue
+            pattern = item.get("pattern")
+            palette = _validate_palette(item.get("palette"))
             if pattern in PATTERN_NAMES and palette:
-                design = {"pattern": pattern, "palette": palette, "mood": str(raw.get("mood", ""))[:60]}
+                candidates.append({"pattern": pattern, "palette": palette, "mood": str(item.get("mood", ""))[:60]})
     except Exception:
-        design = None
-    if design is None:
-        design = {"pattern": "waves", "palette": DEFAULT_PALETTE, "mood": "内置默认设计（LLM 设计环节失败）"}
+        candidates = []
+    if not candidates:
+        candidates = [_default_design(recent)]
+
+    fresh = [c for c in candidates if c["pattern"] not in recent] or candidates
+    design = random.Random(_stable_seed(f"{title}|pick")).choice(fresh)
 
     path, applied = generate_cover(title, design)
-    return path, {**design, **applied, "pattern_applied": applied["pattern"], "source": source_label}
+    return path, {
+        **design,
+        **applied,
+        "pattern_applied": applied["pattern"],
+        "source": source_label,
+        "candidates": candidates,
+        "recent_patterns": recent,
+    }

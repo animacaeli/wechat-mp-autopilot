@@ -4,6 +4,11 @@
 版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
 ## [Unreleased]
+### Changed
+- 封面与配图多样性：美术指导一次产出 3 个差异化候选（不同图案+不同色系），
+  随机选用（同标题种子固定）；自动避开最近两篇用过的图案（防连续撞款）；
+  本地兜底封面配 5 套渐变色库按标题轮换；候选与选用理由落档 06_meta.json
+
 ### Fixed
 - 草稿留言默认关闭的问题：`need_open_comment` 此前硬编码为 0，现默认开启留言并开放配置
   （`[publish].open_comment` / `only_fans_comment`，env 通道 `AUTOPILOT_PUBLISH_OPEN_COMMENT` /

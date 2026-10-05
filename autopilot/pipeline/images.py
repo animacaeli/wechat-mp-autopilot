@@ -235,9 +235,22 @@ def _process_cover(src: Path, title: str) -> Path:
     return out
 
 
+# 本地兜底封面的渐变色库：按标题种子轮换，避免每篇同款
+LOCAL_GRADIENTS = [
+    ((52, 68, 88), (110, 128, 150)),  # 暗蓝灰
+    ((58, 44, 40), (122, 92, 74)),  # 暖棕
+    ((36, 52, 46), (96, 128, 108)),  # 墨绿
+    ((52, 42, 62), (118, 100, 134)),  # 暗紫灰
+    ((40, 52, 60), (96, 122, 138)),  # 青灰
+]
+
+
 def _local_cover(title: str) -> Path:
-    """本地生成封面：左右渐变底 + 居中标题白字，零外部依赖。"""
-    img = _gradient(COVER_SIZE, (52, 68, 88), (110, 128, 150))
+    """本地生成封面：渐变底（色库按标题种子轮换）+ 居中标题白字，零外部依赖。"""
+    from .artgen import _stable_seed
+
+    c1, c2 = random.Random(_stable_seed(f"{title}|local")).choice(LOCAL_GRADIENTS)
+    img = _gradient(COVER_SIZE, c1, c2)
     font = _load_font(54)
     if font is not None:
         draw = ImageDraw.Draw(img)
