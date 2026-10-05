@@ -23,6 +23,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: forbid-private-files
+        name: 防泄检查（.env/config.toml/runs 等禁止入库）
+        entry: bash scripts/forbid_private_files.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
       - id: pytest
         name: pytest（推送前全量测试）
         entry: uv run pytest -q

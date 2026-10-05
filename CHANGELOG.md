@@ -4,6 +4,11 @@
 版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
 ## [Unreleased]
+### Added
+- 私密/产物文件防泄检查：`scripts/forbid_private_files.sh` 同时挂载 pre-commit
+  钩子与 CI 首步，`.env`/`config.toml`/`runs/`/`__pycache__` 等一旦被跟踪即失败，
+  兜住 .gitignore 被误改的场景
+
 ### Changed
 - 封面与配图多样性：美术指导一次产出 3 个差异化候选（不同图案+不同色系），
   随机选用（同标题种子固定）；自动避开最近两篇用过的图案（防连续撞款）；
